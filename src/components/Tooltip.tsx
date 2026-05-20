@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface TooltipProps {
   children: React.ReactNode;
   content: React.ReactNode;
+  key?: React.Key;
 }
 
 export function Tooltip({ children, content }: TooltipProps) {

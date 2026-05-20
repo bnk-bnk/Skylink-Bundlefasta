@@ -1,8 +1,8 @@
-import { useState, useEffect, useMemo } from 'react';
-import { Smartphone, Send, CheckCircle2, XCircle, Clock, Search, Filter, ArrowUpRight, Link as LinkIcon, ExternalLink, Upload, Calendar, Power, Trash2, Copy, MoreVertical, RefreshCw } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Smartphone, Send, CheckCircle2, XCircle, Clock, Search, ArrowUpRight, Link as LinkIcon, ExternalLink, Upload, Calendar, Power, Trash2, Copy, MoreVertical, RefreshCw, X, Share2 } from 'lucide-react';
 import { useNavigation } from '../components/NavigationContext';
 import { supabase } from '../utils/supabaseClient';
+import { motion, AnimatePresence } from 'motion/react';
 
 interface STKRequest {
   id: string;
@@ -16,36 +16,15 @@ interface STKRequest {
 interface PaymentLink {
   id: string;
   title: string;
-  desc: string;
-  amount: string;
-  ref: string;
-  logo: string;
-  status: 'Active' | 'Disabled';
-  expiry: string | null;
+  slug: string;
+  description: string | null;
+  amount: number | null;
+  fixed_reference: string;
+  logo_url: string | null;
+  is_active: boolean;
+  expiry_date: string | null;
+  created_at: string;
 }
-
-const DEFAULT_LINKS: PaymentLink[] = [
-  { 
-    id: 'link-1',
-    title: 'Annual Server Subscription', 
-    desc: 'Payment for Annual Server Subscription',
-    amount: '5000', 
-    ref: 'SUB-2026-05', 
-    logo: 'https://images.unsplash.com/photo-1599305445671-ac291c95aaa9?ixlib=rb-4.0.3&auto=format&fit=crop&w=150&q=80',
-    status: 'Active',
-    expiry: '2026-12-31'
-  },
-  { 
-    id: 'link-2',
-    title: 'Consultation Fee', 
-    desc: 'Standard consultation fee block',
-    amount: 'Open', 
-    ref: 'CONSULT', 
-    logo: '',
-    status: 'Active',
-    expiry: null
-  }
-];
 
 export function STKPushPage() {
   const { setActivePage } = useNavigation();
@@ -66,27 +45,16 @@ export function STKPushPage() {
 
   // Payment Link Generator State
   const [linkTitle, setLinkTitle] = useState('');
-  const [linkLogo, setLinkLogo] = useState('');
+  const [logoFile, setLogoFile] = useState<File | null>(null);
   const [linkDesc, setLinkDesc] = useState('');
   const [linkAmount, setLinkAmount] = useState('');
   const [linkRef, setLinkRef] = useState('');
+  const [linkExpiry, setLinkExpiry] = useState('');
   const [paymentLinks, setPaymentLinks] = useState<PaymentLink[]>([]);
   const [activeLinkMenu, setActiveLinkMenu] = useState<string | null>(null);
-
-  // Load payment links from local storage or defaults
-  useEffect(() => {
-    const saved = localStorage.getItem('skylink_payment_links');
-    if (saved) {
-      try {
-        setPaymentLinks(JSON.parse(saved));
-      } catch {
-        setPaymentLinks(DEFAULT_LINKS);
-      }
-    } else {
-      setPaymentLinks(DEFAULT_LINKS);
-      localStorage.setItem('skylink_payment_links', JSON.stringify(DEFAULT_LINKS));
-    }
-  }, []);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [sharingLink, setSharingLink] = useState<PaymentLink | null>(null);
+  const [copiedLink, setCopiedLink] = useState(false);
 
   const fetchSTKPushes = async () => {
     try {
@@ -117,8 +85,23 @@ export function STKPushPage() {
     }
   };
 
+  const fetchPaymentLinks = async () => {
+    try {
+      const { data, error: err } = await supabase
+        .from('payment_links')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (err) throw err;
+      setPaymentLinks(data || []);
+    } catch (e: any) {
+      console.error('Error fetching payment links:', e);
+    }
+  };
+
   useEffect(() => {
     fetchSTKPushes();
+    fetchPaymentLinks();
 
     const channel = supabase
       .channel('stk-pushes-realtime')
@@ -127,6 +110,13 @@ export function STKPushPage() {
         { event: '*', schema: 'public', table: 'transactions', filter: 'transaction_type=eq.STK_PUSH' },
         () => {
           fetchSTKPushes();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'payment_links' },
+        () => {
+          fetchPaymentLinks();
         }
       )
       .subscribe();
@@ -173,7 +163,8 @@ export function STKPushPage() {
         body: JSON.stringify({
           phone: phone,
           amount: Number(amount),
-          reference: reference
+          reference: reference,
+          description: description
         })
       });
 
@@ -198,77 +189,153 @@ export function STKPushPage() {
     }
   };
 
-  const handleGenerateLink = (e: React.FormEvent) => {
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setLogoFile(e.target.files[0]);
+    }
+  };
+
+  const handleGenerateLink = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!linkTitle || !linkRef) {
       alert('Please provide a title and reference.');
       return;
     }
 
-    const newLink: PaymentLink = {
-      id: `link-${Date.now()}`,
-      title: linkTitle,
-      desc: linkDesc || 'No description provided.',
-      amount: linkAmount || 'Open',
-      ref: linkRef,
-      logo: linkLogo,
-      status: 'Active',
-      expiry: null
-    };
+    if (linkExpiry && new Date(linkExpiry) <= new Date()) {
+      alert('Expiry date and time must be in the future.');
+      return;
+    }
 
-    const updated = [newLink, ...paymentLinks];
-    setPaymentLinks(updated);
-    localStorage.setItem('skylink_payment_links', JSON.stringify(updated));
+    setUploadingLogo(true);
+    let uploadedLogoUrl = '';
 
-    // Reset Form
-    setLinkTitle('');
-    setLinkLogo('');
-    setLinkDesc('');
-    setLinkAmount('');
-    setLinkRef('');
-    alert('Payment link generated!');
-  };
+    try {
+      if (logoFile) {
+        const fileExt = logoFile.name.split('.').pop();
+        const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+        const filePath = `logos/${fileName}`;
 
-  const deleteLink = (id: string) => {
-    const updated = paymentLinks.filter(l => l.id !== id);
-    setPaymentLinks(updated);
-    localStorage.setItem('skylink_payment_links', JSON.stringify(updated));
-    setActiveLinkMenu(null);
-  };
+        const { error: uploadError } = await supabase.storage
+          .from('site-logos')
+          .upload(filePath, logoFile, {
+            cacheControl: '3600',
+            upsert: false
+          });
 
-  const toggleLinkStatus = (id: string) => {
-    const updated = paymentLinks.map(l => {
-      if (l.id === id) {
-        return { ...l, status: l.status === 'Active' ? 'Disabled' as const : 'Active' as const };
+        if (uploadError) throw uploadError;
+
+        // Get public URL
+        const { data: { publicUrl } } = supabase.storage
+          .from('site-logos')
+          .getPublicUrl(filePath);
+
+        uploadedLogoUrl = publicUrl;
       }
-      return l;
-    });
-    setPaymentLinks(updated);
-    localStorage.setItem('skylink_payment_links', JSON.stringify(updated));
-    setActiveLinkMenu(null);
+
+      // Generate slug
+      const cleanSlug = linkTitle.toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/(^-|-$)+/g, '') + '-' + Math.floor(1000 + Math.random() * 9000);
+
+      const { error: insertError } = await supabase
+        .from('payment_links')
+        .insert({
+          title: linkTitle,
+          slug: cleanSlug,
+          description: linkDesc || null,
+          amount: linkAmount ? Number(linkAmount) : null,
+          fixed_reference: linkRef,
+          logo_url: uploadedLogoUrl || null,
+          is_active: true,
+          expiry_date: linkExpiry ? new Date(linkExpiry).toISOString() : null
+        });
+
+      if (insertError) throw insertError;
+
+      // Reset Form
+      setLinkTitle('');
+      setLogoFile(null);
+      setLinkDesc('');
+      setLinkAmount('');
+      setLinkRef('');
+      setLinkExpiry('');
+      alert('Payment link generated successfully!');
+      fetchPaymentLinks();
+    } catch (err: any) {
+      console.error('Error generating link:', err);
+      alert(`Error generating payment link: ${err.message}`);
+    } finally {
+      setUploadingLogo(false);
+    }
+  };
+
+  const deleteLink = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this payment link?')) return;
+    try {
+      const { error: err } = await supabase
+        .from('payment_links')
+        .delete()
+        .eq('id', id);
+
+      if (err) throw err;
+      setActiveLinkMenu(null);
+      fetchPaymentLinks();
+    } catch (e: any) {
+      console.error('Error deleting link:', e);
+      alert(`Error deleting link: ${e.message}`);
+    }
+  };
+
+  const toggleLinkStatus = async (id: string, currentStatus: boolean) => {
+    try {
+      const { error: err } = await supabase
+        .from('payment_links')
+        .update({ is_active: !currentStatus })
+        .eq('id', id);
+
+      if (err) throw err;
+      setActiveLinkMenu(null);
+      fetchPaymentLinks();
+    } catch (e: any) {
+      console.error('Error updating status:', e);
+      alert(`Error updating link status: ${e.message}`);
+    }
   };
 
   const getLinkUrl = (link: PaymentLink) => {
-    const path = `${window.location.origin}/checkout`;
-    const params = new URLSearchParams({
-      amount: link.amount === 'Open' ? '100' : link.amount,
-      ref: link.ref,
-      title: link.title,
-      desc: link.desc,
-      logo: link.logo
-    });
-    return `${path}?${params.toString()}`;
+    return `${window.location.origin}/checkout?slug=${link.slug}`;
   };
 
-  const handleCopyLink = (link: PaymentLink) => {
+  const handleShareLink = async (link: PaymentLink) => {
     const url = getLinkUrl(link);
-    navigator.clipboard.writeText(url);
-    alert('Payment URL copied to clipboard');
+    const text = link.description || `Payment link for ${link.title}`;
+    
+    const shareData = {
+      title: link.title,
+      text: text,
+      url: url
+    };
+    
+    if (navigator.share && (!navigator.canShare || navigator.canShare(shareData))) {
+      try {
+        await navigator.share(shareData);
+        return;
+      } catch (err: any) {
+        if (err.name !== 'AbortError') {
+          console.error('Error sharing natively:', err);
+        } else {
+          return;
+        }
+      }
+    }
+    
+    setSharingLink(link);
+    setCopiedLink(false);
   };
 
   const handlePreviewLink = (link: PaymentLink) => {
     const url = getLinkUrl(link);
-    // Standard react-router is bypassed for simple demo flow using custom navigation
     window.history.pushState({}, '', url);
     setActivePage('Payment Checkout');
   };
@@ -440,8 +507,8 @@ export function STKPushPage() {
                     <tr>
                       <td colSpan={5} className="py-20 text-center">
                         <div className="flex flex-col items-center justify-center gap-3">
-                          <RefreshCw size={24} className="text-brand-accent animate-spin" />
-                          <span className="text-brand-text/60">Fetching pushes...</span>
+                           <RefreshCw size={24} className="text-brand-accent animate-spin" />
+                           <span className="text-brand-text/60">Fetching pushes...</span>
                         </div>
                       </td>
                     </tr>
@@ -524,14 +591,34 @@ export function STKPushPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-brand-text/80 mb-1.5">Logo URL</label>
-                  <input
-                    type="url"
-                    value={linkLogo}
-                    onChange={(e) => setLinkLogo(e.target.value)}
-                    placeholder="https://example.com/logo.png"
-                    className="w-full bg-brand-bg border border-brand-border rounded-lg px-3 py-2 text-brand-text focus:outline-none focus:border-brand-accent transition-all"
-                  />
+                  <label className="block text-sm font-semibold text-brand-text/80 mb-1.5">Logo Image Upload</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleFileChange}
+                      className="hidden"
+                      id="logo-file-upload"
+                    />
+                    <label
+                      htmlFor="logo-file-upload"
+                      className="flex-1 bg-brand-bg border border-brand-border rounded-lg px-3 py-2 text-brand-text text-sm cursor-pointer hover:border-brand-accent transition-all flex items-center justify-between overflow-hidden text-ellipsis whitespace-nowrap"
+                    >
+                      <span className="text-brand-text/50 truncate">
+                        {logoFile ? logoFile.name : 'Upload logo image...'}
+                      </span>
+                      <Upload size={16} className="text-brand-text/40 flex-shrink-0" />
+                    </label>
+                    {logoFile && (
+                      <button
+                        type="button"
+                        onClick={() => setLogoFile(null)}
+                        className="px-2 bg-rose-500/10 border border-rose-500/20 text-status-danger rounded-lg text-xs"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
               <div>
@@ -567,11 +654,26 @@ export function STKPushPage() {
                   />
                 </div>
               </div>
+              <div>
+                <label className="block text-sm font-semibold text-brand-text/80 mb-1.5">Link Expiry Date & Time (Optional)</label>
+                <input
+                  type="datetime-local"
+                  value={linkExpiry}
+                  onChange={(e) => setLinkExpiry(e.target.value)}
+                  className="w-full bg-brand-bg border border-brand-border rounded-lg px-3 py-2 text-brand-text focus:outline-none focus:border-brand-accent transition-all font-sans"
+                />
+                <span className="text-[10px] text-brand-text/40 mt-1 block">Specify when this checkout link should stop accepting payments. Leave blank to never expire.</span>
+              </div>
               <button
                 type="submit"
-                className="w-full sm:w-auto mt-2 px-6 py-2.5 bg-brand-accent hover:opacity-90 text-white rounded-lg font-bold transition-all flex items-center justify-center gap-2"
+                disabled={uploadingLogo}
+                className="w-full sm:w-auto mt-2 px-6 py-2.5 bg-brand-accent hover:opacity-90 text-white rounded-lg font-bold transition-all flex items-center justify-center gap-2 disabled:opacity-50"
               >
-                Generate Link
+                {uploadingLogo ? (
+                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                  'Generate Link'
+                )}
               </button>
             </form>
           </div>
@@ -585,94 +687,246 @@ export function STKPushPage() {
           <p className="text-sm text-brand-text/60 mt-1">Manage and share generated URLs.</p>
         </div>
         <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {paymentLinks.map((link) => (
-            <div key={link.id} className="bg-brand-bg border border-brand-border rounded-xl overflow-hidden flex flex-col relative group">
-              <div className="p-5 border-b border-brand-border/50 text-center relative">
-                <div className="absolute top-3 right-3 flex gap-1">
-                  <span className={`px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider ${link.status === 'Active' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>
-                    {link.status}
-                  </span>
-                </div>
-                <div className="w-14 h-14 mx-auto rounded-xl overflow-hidden mb-3 border border-brand-border shadow-sm bg-brand-panel flex items-center justify-center">
-                  {link.logo ? (
-                    <img src={link.logo} alt="Logo" className="w-full h-full object-cover" />
-                  ) : (
-                    <span className="text-brand-text/30 font-bold text-xl">{link.title.charAt(0)}</span>
-                  )}
-                </div>
-                <h5 className="font-bold text-brand-text leading-tight">{link.title}</h5>
-                <p className="text-xs text-brand-text/50 mt-2 line-clamp-2 min-h-[32px]">{link.desc}</p>
-                
-                <div className="mt-4 p-3 bg-brand-panel border border-brand-border/50 rounded-lg flex justify-between items-center text-left">
-                   <div>
-                     <p className="text-[10px] text-brand-text/40 uppercase tracking-wider font-semibold">Amount</p>
-                     <p className="font-bold text-brand-text mt-0.5">{link.amount === 'Open' ? 'Any Amount' : `KES ${Number(link.amount).toLocaleString()}`}</p>
-                   </div>
-                   <div className="text-right">
-                     <p className="text-[10px] text-brand-text/40 uppercase tracking-wider font-semibold">Ref</p>
-                     <p className="font-mono text-xs text-brand-text/80 mt-0.5">{link.ref}</p>
-                   </div>
-                </div>
-              </div>
-              
-              <div className="p-4 flex-1 flex items-end">
-                <div className="w-full grid grid-cols-2 gap-2">
-                  <button 
-                    onClick={() => handleCopyLink(link)}
-                    className="px-3 py-2 bg-brand-panel hover:bg-brand-border border border-brand-border rounded-lg text-brand-text text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 shadow-sm"
-                  >
-                    <Copy size={14} /> Copy
-                  </button>
-                  <button
-                    onClick={() => handlePreviewLink(link)}
-                    disabled={link.status !== 'Active'}
-                    className="px-3 py-2 bg-brand-accent hover:opacity-90 text-white rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <ExternalLink size={14} /> Preview
-                  </button>
-                </div>
-              </div>
-              
-              <div className="px-4 py-3 border-t border-brand-border/50 flex items-center justify-between bg-brand-panel">
-                <div className="flex items-center text-xs text-brand-text/50 gap-1.5">
-                  <Calendar size={12} />
-                  {link.expiry ? `Expires ${link.expiry}` : 'No Expiry'}
-                </div>
-                
-                <div className="relative">
-                  <button 
-                    onClick={() => setActiveLinkMenu(activeLinkMenu === link.id ? null : link.id)}
-                    className="p-1 text-brand-text/40 hover:text-brand-text hover:bg-brand-border rounded"
-                  >
-                    <MoreVertical size={14} />
-                  </button>
-                  
-                  {activeLinkMenu === link.id && (
-                    <>
-                      <div className="fixed inset-0 z-45" onClick={() => setActiveLinkMenu(null)} />
-                      <div className="absolute right-0 bottom-full mb-1 w-40 bg-brand-panel border border-brand-border shadow-xl rounded-lg z-50 overflow-hidden text-left py-1 text-xs">
-                        <button 
-                          onClick={() => toggleLinkStatus(link.id)}
-                          className="w-full px-3 py-2 text-brand-text/80 hover:text-brand-text hover:bg-brand-bg flex items-center gap-2 transition-colors"
-                        >
-                          <Power size={12} /> {link.status === 'Active' ? 'Disable Link' : 'Enable Link'}
-                        </button>
-                        <div className="h-px bg-brand-border my-1" />
-                        <button 
-                          onClick={() => deleteLink(link.id)}
-                          className="w-full px-3 py-2 text-status-danger hover:bg-status-danger/10 flex items-center gap-2 transition-colors"
-                        >
-                          <Trash2 size={12} /> Delete Link
-                        </button>
-                      </div>
-                    </>
-                  )}
-                </div>
-              </div>
+          {paymentLinks.length === 0 ? (
+            <div className="col-span-full py-10 text-center text-brand-text/40 italic">
+              No payment links generated yet. Use the form above to generate your first collection link.
             </div>
-          ))}
+          ) : (
+            paymentLinks.map((link) => (
+              <div key={link.id} className="bg-brand-bg border border-brand-border rounded-xl overflow-hidden flex flex-col relative group">
+                <div className="p-5 border-b border-brand-border/50 text-center relative">
+                  <div className="absolute top-3 right-3 flex gap-1">
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider ${link.is_active ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>
+                      {link.is_active ? 'Active' : 'Disabled'}
+                    </span>
+                  </div>
+                  <div className="w-14 h-14 mx-auto rounded-xl overflow-hidden mb-3 border border-brand-border shadow-sm bg-brand-panel flex items-center justify-center">
+                    {link.logo_url ? (
+                      <img src={link.logo_url} alt="Logo" className="w-full h-full object-cover" />
+                    ) : (
+                      <span className="text-brand-text/30 font-bold text-xl">{link.title.charAt(0)}</span>
+                    )}
+                  </div>
+                  <h5 className="font-bold text-brand-text leading-tight">{link.title}</h5>
+                  <p className="text-xs text-brand-text/50 mt-2 line-clamp-2 min-h-[32px]">{link.description || 'No description provided.'}</p>
+                  
+                  <div className="mt-4 p-3 bg-brand-panel border border-brand-border/50 rounded-lg flex justify-between items-center text-left">
+                     <div>
+                       <p className="text-[10px] text-brand-text/40 uppercase tracking-wider font-semibold">Amount</p>
+                       <p className="font-bold text-brand-text mt-0.5">
+                         {link.amount && Number(link.amount) > 0 ? `KES ${Number(link.amount).toLocaleString()}` : 'Flexible'}
+                       </p>
+                     </div>
+                     <div className="text-right">
+                       <p className="text-[10px] text-brand-text/40 uppercase tracking-wider font-semibold">Ref</p>
+                       <p className="font-mono text-xs text-brand-text/80 mt-0.5">{link.fixed_reference}</p>
+                     </div>
+                  </div>
+                </div>
+                
+                <div className="p-4 flex-1 flex items-end">
+                  <div className="w-full grid grid-cols-2 gap-2">
+                    <button 
+                      onClick={() => handleShareLink(link)}
+                      className="px-3 py-2 bg-brand-panel hover:bg-brand-border border border-brand-border rounded-lg text-brand-text text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 shadow-sm"
+                    >
+                      <Share2 size={14} /> Share
+                    </button>
+                    <button
+                      onClick={() => handlePreviewLink(link)}
+                      disabled={!link.is_active}
+                      className="px-3 py-2 bg-brand-accent hover:opacity-90 text-white rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <ExternalLink size={14} /> Preview
+                    </button>
+                  </div>
+                </div>
+                
+                <div className="px-4 py-3 border-t border-brand-border/50 flex items-center justify-between bg-brand-panel">
+                  <div className="flex items-center text-xs gap-1.5">
+                    {link.expiry_date ? (
+                      (() => {
+                        const isExpired = new Date(link.expiry_date) < new Date();
+                        return (
+                          <span className={`flex items-center gap-1.5 ${isExpired ? 'text-status-danger font-semibold' : 'text-brand-text/50'}`}>
+                            {isExpired ? <Clock size={12} className="animate-pulse" /> : <Calendar size={12} />}
+                            {isExpired ? 'Expired' : `Expires ${formatDate(link.expiry_date)}`}
+                          </span>
+                        );
+                      })()
+                    ) : (
+                      <span className="text-brand-text/50 flex items-center gap-1.5">
+                        <Calendar size={12} />
+                        No Expiry
+                      </span>
+                    )}
+                  </div>
+                  
+                  <div className="relative">
+                    <button 
+                      onClick={() => setActiveLinkMenu(activeLinkMenu === link.id ? null : link.id)}
+                      className="p-1 text-brand-text/40 hover:text-brand-text hover:bg-brand-border rounded"
+                    >
+                      <MoreVertical size={14} />
+                    </button>
+                    
+                    {activeLinkMenu === link.id && (
+                      <>
+                        <div className="fixed inset-0 z-45" onClick={() => setActiveLinkMenu(null)} />
+                        <div className="absolute right-0 bottom-full mb-1 w-40 bg-brand-panel border border-brand-border shadow-xl rounded-lg z-50 overflow-hidden text-left py-1 text-xs">
+                          <button 
+                            onClick={() => toggleLinkStatus(link.id, link.is_active)}
+                            className="w-full px-3 py-2 text-brand-text/80 hover:text-brand-text hover:bg-brand-bg flex items-center gap-2 transition-colors"
+                          >
+                            <Power size={12} /> {link.is_active ? 'Disable Link' : 'Enable Link'}
+                          </button>
+                          <div className="h-px bg-brand-border my-1" />
+                          <button 
+                            onClick={() => deleteLink(link.id)}
+                            className="w-full px-3 py-2 text-status-danger hover:bg-status-danger/10 flex items-center gap-2 transition-colors"
+                          >
+                            <Trash2 size={12} /> Delete Link
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </div>
+      {/* Fallback Share Modal */}
+      <AnimatePresence>
+        {sharingLink && (
+          <>
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setSharingLink(null)}
+              className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm"
+            />
+            {/* Modal Body */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-55 w-full max-w-md bg-brand-panel border border-brand-border rounded-2xl shadow-2xl p-6 overflow-hidden flex flex-col font-sans"
+            >
+              <div className="flex justify-between items-center pb-4 border-b border-brand-border">
+                <h3 className="text-lg font-bold text-brand-text flex items-center gap-2">
+                  <Share2 className="text-brand-accent" size={20} />
+                  Share Payment Link
+                </h3>
+                <button
+                  onClick={() => setSharingLink(null)}
+                  className="p-1 text-brand-text/50 hover:text-brand-text hover:bg-brand-border/50 rounded-full transition-all"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              {/* Link Details Preview */}
+              <div className="my-5 p-4 bg-brand-bg rounded-xl border border-brand-border/60 flex items-center gap-3">
+                <div className="w-12 h-12 rounded-lg border border-brand-border overflow-hidden bg-brand-panel flex items-center justify-center flex-shrink-0">
+                  {sharingLink.logo_url ? (
+                    <img src={sharingLink.logo_url} alt="Logo" className="w-full h-full object-cover" />
+                  ) : (
+                    <span className="text-brand-text/30 font-bold text-lg">{sharingLink.title.charAt(0)}</span>
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h4 className="font-bold text-brand-text truncate leading-snug">{sharingLink.title}</h4>
+                  <p className="text-xs text-brand-text/50 truncate mt-0.5">
+                    {sharingLink.amount && Number(sharingLink.amount) > 0 ? `KES ${Number(sharingLink.amount).toLocaleString()}` : 'Flexible amount'} • Ref: {sharingLink.fixed_reference}
+                  </p>
+                </div>
+              </div>
+
+              {/* Share Options Grid */}
+              <div className="grid grid-cols-2 gap-3 mb-5">
+                {/* WhatsApp */}
+                <a
+                  href={`https://api.whatsapp.com/send?text=${encodeURIComponent(
+                    `Pay for ${sharingLink.title}:\n${getLinkUrl(sharingLink)}`
+                  )}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-3 p-3 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 hover:border-emerald-500/30 text-emerald-400 rounded-xl font-semibold text-sm transition-all justify-center cursor-pointer"
+                >
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 12.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L0 24l6.335-1.662c1.746.953 3.71 1.458 5.704 1.459h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                  </svg>
+                  WhatsApp
+                </a>
+
+                {/* Facebook */}
+                <a
+                  href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(getLinkUrl(sharingLink))}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-3 p-3 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 hover:border-blue-500/30 text-blue-400 rounded-xl font-semibold text-sm transition-all justify-center cursor-pointer"
+                >
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                    <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                  </svg>
+                  Facebook
+                </a>
+
+                {/* Email */}
+                <a
+                  href={`mailto:?subject=${encodeURIComponent(
+                    `Payment Link: ${sharingLink.title}`
+                  )}&body=${encodeURIComponent(
+                    `${sharingLink.description || 'Payment request'}\n\nPlease pay here: ${getLinkUrl(sharingLink)}`
+                  )}`}
+                  className="flex items-center gap-3 p-3 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 hover:border-red-500/30 text-red-400 rounded-xl font-semibold text-sm transition-all justify-center cursor-pointer"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+                  Email
+                </a>
+
+                {/* Copy Link */}
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(getLinkUrl(sharingLink));
+                    setCopiedLink(true);
+                    setTimeout(() => setCopiedLink(false), 2000);
+                  }}
+                  className="flex items-center gap-3 p-3 bg-brand-accent/10 hover:bg-brand-accent/20 border border-brand-accent/20 hover:border-brand-accent/30 text-brand-accent rounded-xl font-semibold text-sm transition-all justify-center cursor-pointer"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                  {copiedLink ? 'Copied!' : 'Copy Link'}
+                </button>
+              </div>
+
+              {/* Raw Link Input */}
+              <div className="relative mt-2">
+                <input
+                  type="text"
+                  readOnly
+                  value={getLinkUrl(sharingLink)}
+                  className="w-full bg-brand-bg border border-brand-border rounded-xl pl-4 pr-12 py-3 text-xs text-brand-text/70 focus:outline-none font-mono"
+                  onClick={(e) => (e.target as HTMLInputElement).select()}
+                />
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(getLinkUrl(sharingLink));
+                    setCopiedLink(true);
+                    setTimeout(() => setCopiedLink(false), 2000);
+                  }}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-2 hover:bg-brand-border rounded-lg text-brand-text/50 hover:text-brand-text transition-colors"
+                >
+                  <Copy size={16} />
+                </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

@@ -10,7 +10,8 @@ import {
   BarChart3, 
   Settings,
   LogOut,
-  X
+  X,
+  Coins
 } from 'lucide-react';
 import { useLayout } from './LayoutContext';
 import { useNavigation } from './NavigationContext';
@@ -23,6 +24,7 @@ const NAV_ITEMS = [
   { name: 'Paybill Activity', icon: Activity },
   { name: 'STK Push', icon: Smartphone },
   { name: 'Merchant Payments', icon: Store },
+  { name: 'Treasury', icon: Coins },
   { name: 'Reversals', icon: RotateCcw },
   { name: 'Reconciliation', icon: FileCheck2 },
   { name: 'Customers', icon: Users },

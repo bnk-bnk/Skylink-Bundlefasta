@@ -7,6 +7,10 @@ import { validateWebhookToken, checkIdempotency, logRawPayload } from './service
 import { initiateBusinessBuyGoods } from './services/businessBuyGoods/initiateBusinessBuyGoods';
 import { handleBusinessBuyGoodsResult } from './services/businessBuyGoods/handleBusinessBuyGoodsResult';
 import { handleBusinessBuyGoodsTimeout } from './services/businessBuyGoods/handleBusinessBuyGoodsTimeout';
+import { initiateB2CTopup } from './services/b2cTopup/initiateB2CTopup';
+import { handleB2CTopupResult } from './services/b2cTopup/handleB2CTopupResult';
+import { handleB2CTopupTimeout } from './services/b2cTopup/handleB2CTopupTimeout';
+import { reconcileB2CTopup } from './services/b2cTopup/reconcileB2CTopup';
 
 dotenv.config();
 
@@ -877,7 +881,164 @@ app.post('/api/webhooks/business-buy-goods/timeout', async (req, res) => {
   }
 });
 
+/**
+ * M-PESA B2C ACCOUNT TOP UP (B2B FLOAT LOADING) APIs
+ */
+
+// 16. Initiate B2C Float Top Up
+app.post('/api/treasury/b2c-topup', async (req, res) => {
+  const { destinationShortcode, amount, accountReference, remarks, requesterPhone, confirmationPassword, userId } = req.body;
+
+  if (!destinationShortcode || !amount || !accountReference || !remarks) {
+    return res.status(400).json({ error: 'Missing destinationShortcode, amount, accountReference, or remarks parameter.' });
+  }
+
+  try {
+    const result = await initiateB2CTopup({
+      destinationShortcode,
+      amount: Number(amount),
+      accountReference,
+      remarks,
+      requesterPhone,
+      confirmationPassword,
+      userId
+    });
+
+    return res.json(result);
+  } catch (err: any) {
+    console.error('[B2C Topup API Error]', err);
+    return res.status(500).json({ error: err.message || 'Internal Server Error' });
+  }
+});
+
+// 17. Retry B2C Float Top Up
+app.post('/api/treasury/b2c-topup/retry', async (req, res) => {
+  const { transactionId, confirmationPassword, userId } = req.body;
+
+  if (!transactionId) {
+    return res.status(400).json({ error: 'Missing transactionId parameter.' });
+  }
+
+  try {
+    const { data: trx, error: fetchError } = await supabase
+      .from('b2c_account_topups')
+      .select('*')
+      .eq('id', transactionId)
+      .maybeSingle();
+
+    if (fetchError) throw fetchError;
+    if (!trx) {
+      return res.status(404).json({ error: 'Transaction not found.' });
+    }
+
+    if (trx.status !== 'failed' && trx.status !== 'timeout') {
+      return res.status(400).json({ error: `Cannot retry transaction with status: ${trx.status}. Only failed or timed out transactions can be retried.` });
+    }
+
+    const result = await initiateB2CTopup({
+      destinationShortcode: trx.destination_shortcode,
+      amount: Number(trx.amount),
+      accountReference: trx.account_reference,
+      remarks: trx.remarks,
+      requesterPhone: trx.requester_phone,
+      confirmationPassword,
+      userId: userId || trx.created_by,
+      parentTransactionId: trx.id
+    });
+
+    return res.json(result);
+  } catch (err: any) {
+    console.error('[B2C Topup Retry Error]', err);
+    return res.status(500).json({ error: err.message || 'Internal Server Error' });
+  }
+});
+
+// 18. Manual/Query Reconciliation for B2C Float Top Up
+app.post('/api/treasury/b2c-topup/reconcile', async (req, res) => {
+  const { topupId, action, externalTransactionId, actor } = req.body;
+
+  if (!topupId || !action) {
+    return res.status(400).json({ error: 'Missing topupId or action parameter.' });
+  }
+
+  try {
+    const result = await reconcileB2CTopup(topupId, {
+      action,
+      externalTransactionId,
+      actor
+    });
+
+    return res.json(result);
+  } catch (err: any) {
+    console.error('[B2C Topup Reconcile Error]', err);
+    return res.status(500).json({ error: err.message || 'Internal Server Error' });
+  }
+});
+
+// 19. B2C Webhook Result Callback
+app.post('/api/webhooks/b2c-topup/result', async (req, res) => {
+  const clientIp = req.ip || req.socket.remoteAddress || 'unknown';
+  console.log(`[Webhook B2C Topup Result] Received callback from IP: ${clientIp}, Headers:`, req.headers);
+
+  if (!validateWebhookToken(req)) {
+    return res.status(401).json({ error: 'Unauthorized webhook access' });
+  }
+
+  try {
+    const conversationId = req.body?.Result?.ConversationID;
+    let trxId: string | null = null;
+    if (conversationId) {
+      const { data: trx } = await supabase
+        .from('b2c_account_topups')
+        .select('id')
+        .eq('conversation_id', conversationId)
+        .maybeSingle();
+      if (trx) trxId = trx.id;
+    }
+
+    await logRawPayload(trxId, 'B2C_TOPUP_RESULT_CALLBACK', req.body, 'mpesa_webhook');
+
+    const outcome = await handleB2CTopupResult(req.body, clientIp);
+    return res.json({ ResultCode: 0, ResultDesc: 'Success', outcome });
+  } catch (err: any) {
+    console.error('[Webhook B2C Topup Result Error]', err);
+    return res.status(500).json({ error: err.message || 'Internal webhook processing error' });
+  }
+});
+
+// 20. B2C Webhook Timeout Callback
+app.post('/api/webhooks/b2c-topup/timeout', async (req, res) => {
+  const clientIp = req.ip || req.socket.remoteAddress || 'unknown';
+  console.log(`[Webhook B2C Topup Timeout] Received callback from IP: ${clientIp}`);
+
+  if (!validateWebhookToken(req)) {
+    return res.status(401).json({ error: 'Unauthorized webhook access' });
+  }
+
+  try {
+    const conversationId = req.body?.ConversationID || req.body?.Result?.ConversationID;
+    let trxId: string | null = null;
+    if (conversationId) {
+      const { data: trx } = await supabase
+        .from('b2c_account_topups')
+        .select('id')
+        .eq('conversation_id', conversationId)
+        .maybeSingle();
+      if (trx) trxId = trx.id;
+    }
+
+    await logRawPayload(trxId, 'B2C_TOPUP_TIMEOUT_CALLBACK', req.body, 'mpesa_webhook');
+
+    const outcome = await handleB2CTopupTimeout(req.body, clientIp);
+    return res.json({ ResultCode: 0, ResultDesc: 'Success', outcome });
+  } catch (err: any) {
+    console.error('[Webhook B2C Topup Timeout Error]', err);
+    return res.status(500).json({ error: err.message || 'Internal webhook processing error' });
+  }
+});
+
 const PORT = 5000;
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`[Server] Express server running on port ${PORT}`);
 });
+

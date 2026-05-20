@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { RotateCcw, Send, CheckCircle2, XCircle, Clock, Search, Filter, ArrowUpRight, RefreshCw } from 'lucide-react';
 import { motion } from 'motion/react';
 import { supabase } from '../utils/supabaseClient';

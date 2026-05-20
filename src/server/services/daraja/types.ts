@@ -157,7 +157,7 @@ export interface STKPushQueryResponse {
 export interface B2BRequest {
   Initiator: string;
   SecurityCredential: string;
-  CommandID: 'BusinessPayBill' | 'BusinessBuyGoods' | 'DisburseFundsToReceiver' | 'BusinessToBusinessTransfer' | 'MerchantToMerchantTransfer';
+  CommandID: 'BusinessPayBill' | 'BusinessBuyGoods' | 'DisburseFundsToReceiver' | 'BusinessToBusinessTransfer' | 'MerchantToMerchantTransfer' | 'BusinessPayToBulk';
   SenderIdentifierType: '4'; // Shortcode
   RecieverIdentifierType: '4' | '2'; // 4 = Shortcode, 2 = Till
   Amount: number;
