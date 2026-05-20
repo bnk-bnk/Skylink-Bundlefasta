@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.7.0-stk-simulate] - 2026-05-20
+### Added
+- Implemented **M-Pesa Express Simulate** (STK Push Simulate) API module on dedicated branch `feature/api-stk-simulate`.
+- Simulate API is **sandbox-only** — calls `POST https://sandbox.safaricom.co.ke/mpesa/c2b/v1/simulate` to fire a simulated C2B customer payment that triggers the registered callback URL without requiring an actual device M-Pesa prompt.
+- Created Backend Service at `src/server/services/stkSimulate/initiateSTKSimulate.ts`:
+  - Environment guard: returns a structured error and writes an audit log if called outside sandbox (`config.env !== 'sandbox'`), preventing accidental production calls.
+  - MSISDN normalization: strips non-numeric chars, normalizes 0-prefix and 7/1-prefix to `254XXXXXXXXX` format.
+  - Input validation: amount > 0, phone format `^254[17]\d{8}$`.
+  - Dispatches `POST /mpesa/c2b/v1/simulate` with `ShortCode`, `CommandID` (`CustomerPayBillOnline` or `CustomerBuyGoodsOnline`), `Amount`, `Msisdn`, `BillRefNumber`.
+  - Full audit trail: writes `STK_SIMULATE_SUCCESS`, `STK_SIMULATE_FAILED`, `STK_SIMULATE_BLOCKED_PRODUCTION`, or `STK_SIMULATE_ERROR` events to `audit_logs` with duration, phone, amount, requester.
+  - Returns structured `STKSimulateResult` with `success`, `responseCode`, `responseDescription`, `originatorConversationId`, `conversationId`, and `rawResponse`.
+- Registered Express route in `src/server/index.ts`:
+  - `POST /api/mpesa/stk/simulate`: accepts `msisdn`, `amount`, `billRefNumber`, `commandId` (optional); returns the Daraja API response or a sandbox-guard error.
+- Frontend: Extended `src/pages/STKPushPage.tsx` with a **Sandbox Simulate** section at the bottom of the STK Push page:
+  - Amber-bordered card clearly marked **SANDBOX ONLY** with a prominent warning banner.
+  - Form fields: Customer Phone (MSISDN), Amount, Bill Ref / Account Number, Command ID dropdown (`CustomerPayBillOnline` / `CustomerBuyGoodsOnline`).
+  - Submit button styled in amber to distinguish from the production STK Push flow.
+  - Success/failure result panel with raw response `<details>` inspector.
+  - On success, auto-refreshes the STK Push history table after 2 seconds to capture the incoming callback.
+
 ## [1.5.0-reversal-improvements] - 2026-05-20
 ### Added
 - Enhanced Reversal API to handle asynchronous Daraja callbacks, verify original transactions, and flip double-entry ledger entries.

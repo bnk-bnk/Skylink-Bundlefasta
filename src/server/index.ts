@@ -20,6 +20,7 @@ import { handleAccountBalanceTimeout } from './services/accountBalance/handleAcc
 import { initiateReversal } from './services/reversal/initiateReversal';
 import { handleReversalResult } from './services/reversal/handleReversalResult';
 import { handleReversalTimeout } from './services/reversal/handleReversalTimeout';
+import { initiateSTKSimulate } from './services/stkSimulate/initiateSTKSimulate';
 
 dotenv.config();
 
@@ -247,6 +248,44 @@ app.post('/api/mpesa/stkpush/query', async (req, res) => {
     return res.status(500).json({ error: err.message });
   }
 });
+
+/**
+ * 8b. STK PUSH SIMULATE (Sandbox Only)
+ * POST /api/mpesa/stk/simulate
+ * Triggers a simulated C2B customer payment via Safaricom sandbox.
+ * Use this to test callback flows without an actual mobile prompt.
+ */
+app.post('/api/mpesa/stk/simulate', async (req, res) => {
+  const { msisdn, amount, billRefNumber, commandId, userId } = req.body;
+
+  if (!msisdn || !amount || !billRefNumber) {
+    return res.status(400).json({ error: 'Missing msisdn, amount, or billRefNumber parameter.' });
+  }
+
+  try {
+    const result = await initiateSTKSimulate({
+      msisdn,
+      amount: Number(amount),
+      billRefNumber,
+      commandId,
+      userId
+    });
+
+    if (!result.success) {
+      return res.status(400).json({
+        error: result.error || result.responseDescription,
+        responseCode: result.responseCode,
+        responseDescription: result.responseDescription
+      });
+    }
+
+    return res.json(result);
+  } catch (err: any) {
+    console.error('[STK Simulate Route Error]', err);
+    return res.status(500).json({ error: err.message || 'Internal Server Error' });
+  }
+});
+
 
 /**
  * STK Push Webhook Callback Endpoint
