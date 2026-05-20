@@ -143,66 +143,27 @@ export function TransactionModal({ transaction, isOpen, onClose, onUpdate }: Tra
       const { data: userData } = await supabase.auth.getUser();
       if (!userData?.user) throw new Error('Unauthorized');
 
-      // Create a unique reversal reference using the original receipt
-      const originalReceipt = transaction.external_transaction_id || 'UNKNOWN';
-      const reversalReceipt = `REV-${originalReceipt}-${Math.floor(100 + Math.random() * 900)}`;
-
-      // 1. Create a Reversal Transaction
-      const { data: revTx, error: revTxError } = await supabase
-        .from('transactions')
-        .insert({
-          customer_id: transaction.customer_id,
-          transaction_type: 'REVERSAL',
-          direction: 'outgoing',
-          provider: 'mpesa',
-          external_transaction_id: reversalReceipt,
-          reference: originalReceipt,
-          account_reference: transaction.account_reference,
-          phone_number: transaction.phone_number,
-          amount: transaction.amount,
-          commission_amount: 0,
-          processing_fee: 0,
-          currency: transaction.currency,
-          status: 'completed',
-          occurred_at: new Date().toISOString()
+      // Submit through Express API
+      const response = await fetch('/api/mpesa/reversal', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          originalTransactionId: transaction.id,
+          amount: Number(transaction.amount),
+          remarks: reversalReason.trim(),
+          userId: userData.user.id
         })
-        .select()
-        .single();
-
-      if (revTxError) throw revTxError;
-
-      // 2. Create Balancing Ledger Entries
-      // We flip original entries (Debits become Credits, Credits become Debits)
-      if (ledgerEntries.length > 0) {
-        const reversedEntries = ledgerEntries.map(entry => ({
-          transaction_id: revTx.id,
-          account_id: entry.accounts?.id || 'a1111111-1111-1111-1111-111111111111', // fallback to main
-          entry_type: entry.entry_type === 'DEBIT' ? 'CREDIT' : 'DEBIT',
-          amount: entry.amount
-        }));
-
-        // Insert balancing entries
-        const { error: ledgerError } = await supabase
-          .from('ledger_entries')
-          .insert(reversedEntries);
-
-        if (ledgerError) console.error('Ledger entries reversal warning:', ledgerError);
-      }
-
-      // 3. Insert Audit Log
-      const { error: auditError } = await supabase.from('audit_logs').insert({
-        user_id: userData.user.id,
-        action: 'INITIATE_REVERSAL',
-        entity_type: 'transactions',
-        entity_id: revTx.id,
-        old_values: { original_transaction_id: transaction.id, amount: transaction.amount },
-        new_values: { reason: reversalReason, reversal_receipt: reversalReceipt },
-        ip_address: 'dashboard'
       });
 
-      if (auditError) console.error('Audit log write error:', auditError);
+      const result = await response.json();
 
-      alert(`Reversal initiated successfully. Receipt ID: ${reversalReceipt}`);
+      if (!response.ok) {
+        throw new Error(result.error || 'Server error occurred during reversal submission.');
+      }
+
+      alert(`Reversal query submitted. Conversation ID: ${result.conversation_id || 'Pending'}`);
       if (onUpdate) onUpdate();
       onClose();
     } catch (err: any) {

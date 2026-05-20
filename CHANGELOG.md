@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.0-reversal-improvements] - 2026-05-20
+### Added
+- Enhanced Reversal API to handle asynchronous Daraja callbacks, verify original transactions, and flip double-entry ledger entries.
+- Database Schema: Added `reversal_queries` table in Supabase with strict Row Level Security (RLS) policies, performance indexes, and automatic audit logging.
+- Created Backend Service Layer at `src/server/services/reversal/`:
+  - `initiateReversal.ts`: Dispatches reversal requests to Safaricom Daraja API after checking original transaction status, checking for duplicate reversals, and inserting state-tracked query log. Handles Postgres UUID format matching to prevent casting exceptions.
+  - `parseReversalResult.ts`: Webhook callback unpacker parsing reversal result parameters.
+  - `handleReversalResult.ts`: Webhook result handler executing double-entry ledger offsets (flipping DEBIT/CREDIT entries), inserting reversal records into `transactions`, updating query logs to `completed`, and generating audit logs and notifications.
+  - `handleReversalTimeout.ts`: Queue timeout handler marking query log status as timeout and alerting administrators.
+- Registered Express routes in `src/server/index.ts`:
+  - `POST /api/mpesa/reversal`: Express route for manual reversal query initiation.
+  - `POST /api/webhooks/reversal/result`: Webhook result callback endpoint.
+  - `POST /api/webhooks/reversal/timeout`: Webhook queue timeout callback endpoint.
+- Frontend Dashboard:
+  - Updated `src/pages/ReversalsPage.tsx` to route reversal requests through backend Express API, subscribe to real-time status updates on `reversal_queries` table, and added an interactive **Payload Inspector Modal** allowing developers to view raw request, response, and callback webhook JSON payloads.
+  - Updated `src/components/TransactionModal.tsx` to execute reversals via the backend Express endpoint.
+
 ## [1.4.0-account-balance] - 2026-05-20
 ### Added
 - Implemented production-grade Safaricom Daraja Account Balance Query API module on dedicated branch `feature/api-account-balance`.

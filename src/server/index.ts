@@ -17,6 +17,9 @@ import { handleTransactionStatusTimeout } from './services/transactionStatus/han
 import { initiateAccountBalance } from './services/accountBalance/initiateAccountBalance';
 import { handleAccountBalanceResult } from './services/accountBalance/handleAccountBalanceResult';
 import { handleAccountBalanceTimeout } from './services/accountBalance/handleAccountBalanceTimeout';
+import { initiateReversal } from './services/reversal/initiateReversal';
+import { handleReversalResult } from './services/reversal/handleReversalResult';
+import { handleReversalTimeout } from './services/reversal/handleReversalTimeout';
 
 dotenv.config();
 
@@ -515,25 +518,20 @@ app.post('/api/mpesa/confirm', async (req, res) => {
  * POST /api/mpesa/reversal
  */
 app.post('/api/mpesa/reversal', async (req, res) => {
-  const { originalTransactionId, amount, receiverParty, identifierType, remarks, occasion } = req.body;
+  const { originalTransactionId, amount, receiverParty, identifierType, remarks, userId } = req.body;
 
-  if (!originalTransactionId || !amount || !receiverParty) {
-    return res.status(400).json({ error: 'Missing parameter.' });
+  if (!originalTransactionId || !amount) {
+    return res.status(400).json({ error: 'Missing originalTransactionId or amount parameter.' });
   }
 
   try {
-    const config = await resolveConfig();
-    const result = await DarajaService.requestReversal({
-      Initiator: config.initiatorName || 'api_user',
-      SecurityCredential: config.securityCredential || 'credential',
-      TransactionID: originalTransactionId,
-      Amount: Number(amount),
-      ReceiverParty: receiverParty,
-      RecieverIdentifierType: identifierType || '4',
-      ResultURL: config.callbackUrl,
-      QueueTimeOutURL: config.callbackUrl,
-      Remarks: remarks || 'Reversal request',
-      Occasion: occasion
+    const result = await initiateReversal({
+      originalTxId: originalTransactionId,
+      amount: Number(amount),
+      reason: remarks || 'Manual Reversal',
+      userId,
+      receiverParty,
+      identifierType: identifierType as '1' | '2' | '4' | undefined
     });
 
     return res.json(result);
@@ -624,6 +622,35 @@ app.post('/api/webhooks/account-balance/timeout', async (req, res) => {
     return res.json(result);
   } catch (err: any) {
     console.error('[AccountBalance Timeout Webhook Error]', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * REVERSAL Webhooks
+ */
+app.post('/api/webhooks/reversal/result', async (req, res) => {
+  if (!validateWebhookToken(req)) {
+    return res.status(401).json({ error: 'Unauthorized webhook access' });
+  }
+  try {
+    const result = await handleReversalResult(req.body);
+    return res.json(result);
+  } catch (err: any) {
+    console.error('[Reversal Result Webhook Error]', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/webhooks/reversal/timeout', async (req, res) => {
+  if (!validateWebhookToken(req)) {
+    return res.status(401).json({ error: 'Unauthorized webhook access' });
+  }
+  try {
+    const result = await handleReversalTimeout(req.body);
+    return res.json(result);
+  } catch (err: any) {
+    console.error('[Reversal Timeout Webhook Error]', err);
     return res.status(500).json({ error: err.message });
   }
 });

@@ -1,15 +1,19 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { RotateCcw, Send, CheckCircle2, XCircle, Clock, Search, Filter, ArrowUpRight, RefreshCw } from 'lucide-react';
-import { motion } from 'motion/react';
+import { RotateCcw, Send, CheckCircle2, XCircle, Clock, Search, ArrowUpRight, RefreshCw, Eye, X, Copy } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 import { supabase } from '../utils/supabaseClient';
 
-interface ReversalItem {
+interface ReversalQueryItem {
   id: string;
-  occurred_at: string;
-  reference: string | null;
+  created_at: string;
+  original_receipt: string;
   phone_number: string;
   amount: number;
   status: string;
+  reason: string | null;
+  raw_request: any;
+  raw_response: any;
+  raw_result: any;
 }
 
 export function ReversalsPage() {
@@ -19,30 +23,53 @@ export function ReversalsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // History & Table
-  const [reversals, setReversals] = useState<ReversalItem[]>([]);
+  const [reversals, setReversals] = useState<ReversalQueryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Payload Inspector Modal state
+  const [selectedItem, setSelectedItem] = useState<ReversalQueryItem | null>(null);
+  const [copiedSection, setCopiedSection] = useState<string | null>(null);
 
   const fetchReversals = async () => {
     try {
       setLoading(true);
       const { data, error: err } = await supabase
-        .from('transactions')
-        .select('id, occurred_at, reference, phone_number, amount, status')
-        .eq('transaction_type', 'REVERSAL')
-        .order('occurred_at', { ascending: false });
+        .from('reversal_queries')
+        .select(`
+          id,
+          created_at,
+          original_receipt,
+          amount,
+          status,
+          reason,
+          raw_request,
+          raw_response,
+          raw_result,
+          original_transaction:original_transaction_id (
+            phone_number
+          )
+        `)
+        .order('created_at', { ascending: false });
 
       if (err) throw err;
 
-      const mapped: ReversalItem[] = (data || []).map(tx => ({
-        id: tx.id,
-        occurred_at: tx.occurred_at,
-        reference: tx.reference, // Stores the original transaction receipt/ID
-        phone_number: tx.phone_number,
-        amount: Number(tx.amount),
-        status: tx.status
-      }));
+      const mapped: ReversalQueryItem[] = (data || []).map(q => {
+        const txObj = q.original_transaction as any;
+        return {
+          id: q.id,
+          created_at: q.created_at,
+          original_receipt: q.original_receipt,
+          phone_number: txObj?.phone_number || 'N/A',
+          amount: Number(q.amount),
+          status: q.status,
+          reason: q.reason,
+          raw_request: q.raw_request,
+          raw_response: q.raw_response,
+          raw_result: q.raw_result
+        };
+      });
 
       setReversals(mapped);
     } catch (e: any) {
@@ -60,7 +87,7 @@ export function ReversalsPage() {
       .channel('reversals-realtime')
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'transactions', filter: 'transaction_type=eq.REVERSAL' },
+        { event: '*', schema: 'public', table: 'reversal_queries' },
         () => {
           fetchReversals();
         }
@@ -90,7 +117,7 @@ export function ReversalsPage() {
       const queryLower = searchQuery.toLowerCase();
       return (
         r.phone_number.includes(searchQuery) ||
-        (r.reference || '').toLowerCase().includes(queryLower) ||
+        r.original_receipt.toLowerCase().includes(queryLower) ||
         r.id.toLowerCase().includes(queryLower)
       );
     });
@@ -108,110 +135,43 @@ export function ReversalsPage() {
       const { data: userData } = await supabase.auth.getUser();
       if (!userData?.user) throw new Error('Session expired. Please log in again.');
 
-      // 1. Find original transaction by ID or Receipt ID
-      const { data: origTx, error: findError } = await supabase
-        .from('transactions')
-        .select('*')
-        .or(`id.eq.${origTxId},external_transaction_id.eq.${origTxId.trim().toUpperCase()}`)
-        .maybeSingle();
-
-      if (findError) throw findError;
-      if (!origTx) {
-        alert('Error: Original transaction not found. Please verify the ID/Receipt number.');
-        setIsSubmitting(false);
-        return;
-      }
-
-      // 2. Prevent duplicate reversals
-      const origReceipt = origTx.external_transaction_id || origTx.id;
-      const { data: existingRev, error: checkError } = await supabase
-        .from('transactions')
-        .select('id')
-        .eq('transaction_type', 'REVERSAL')
-        .eq('status', 'completed')
-        .eq('reference', origReceipt)
-        .maybeSingle();
-
-      if (checkError) throw checkError;
-      if (existingRev) {
-        alert(`Block Action: Transaction ${origReceipt} has already been reversed. Duplicate reversals are blocked.`);
-        setIsSubmitting(false);
-        return;
-      }
-
-      // Check if original transaction is completed
-      if (origTx.status !== 'completed') {
-        alert(`Warning: Original transaction status is "${origTx.status}". You can only reverse completed settlements.`);
-        setIsSubmitting(false);
-        return;
-      }
-
-      // 3. Insert Reversal Transaction
-      const revReceipt = `REV-${origReceipt}-${Math.floor(100 + Math.random() * 900)}`;
-      const { data: revTx, error: revTxError } = await supabase
-        .from('transactions')
-        .insert({
-          customer_id: origTx.customer_id,
-          transaction_type: 'REVERSAL',
-          direction: 'outgoing',
-          provider: 'mpesa',
-          external_transaction_id: revReceipt,
-          reference: origReceipt,
-          account_reference: origTx.account_reference,
-          phone_number: origTx.phone_number,
+      // Submit through Express API
+      const response = await fetch('/api/mpesa/reversal', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          originalTransactionId: origTxId.trim(),
           amount: Number(amount),
-          commission_amount: 0,
-          processing_fee: 0,
-          currency: origTx.currency,
-          status: 'completed',
-          occurred_at: new Date().toISOString()
+          remarks: reason.trim(),
+          userId: userData.user.id
         })
-        .select()
-        .single();
-
-      if (revTxError) throw revTxError;
-
-      // 4. Double entry ledger adjustments
-      // Load ledger entries for the original transaction
-      const { data: origLedger } = await supabase
-        .from('ledger_entries')
-        .select('account_id, entry_type, amount')
-        .eq('transaction_id', origTx.id);
-
-      if (origLedger && origLedger.length > 0) {
-        // Reverse them
-        const revLedger = origLedger.map(entry => ({
-          transaction_id: revTx.id,
-          account_id: entry.account_id,
-          entry_type: entry.entry_type === 'DEBIT' ? 'CREDIT' : 'DEBIT',
-          amount: entry.amount
-        }));
-
-        await supabase.from('ledger_entries').insert(revLedger);
-      }
-
-      // 5. Audit Logging
-      await supabase.from('audit_logs').insert({
-        user_id: userData.user.id,
-        action: 'INITIATE_REVERSAL',
-        entity_type: 'transactions',
-        entity_id: revTx.id,
-        old_values: { original_transaction_id: origTx.id, amount: origTx.amount },
-        new_values: { reason: reason, reversal_receipt: revReceipt },
-        ip_address: 'reversals_page'
       });
 
-      alert(`Reversal completed successfully. Receipt: ${revReceipt}`);
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Server error occurred during reversal submission.');
+      }
+
+      alert(`Reversal query submitted. Conversation ID: ${result.conversation_id || 'Pending'}`);
       setOrigTxId('');
       setAmount('');
       setReason('');
       fetchReversals();
     } catch (err: any) {
       console.error(err);
-      alert(`Reversal failed: ${err.message}`);
+      alert(`Reversal initiation failed: ${err.message}`);
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleCopy = (text: string, section: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedSection(section);
+    setTimeout(() => setCopiedSection(null), 2000);
   };
 
   const formatDate = (isoString: string) => {
@@ -266,7 +226,7 @@ export function ReversalsPage() {
                 <RotateCcw size={20} className="text-status-warning" />
                 Initiate Reversal
               </h3>
-              <p className="text-sm text-brand-text/50 mt-1">Request a reversal for an incorrect or fraudulent transaction.</p>
+              <p className="text-sm text-brand-text/50 mt-1">Submit an asynchronous Daraja reversal query request.</p>
             </div>
             <div className="p-6 flex-1">
               <form onSubmit={handleSubmit} className="space-y-4">
@@ -328,7 +288,7 @@ export function ReversalsPage() {
         <div className="lg:col-span-2">
           <div className="bg-brand-panel border border-brand-border rounded-xl shadow-sm flex flex-col h-[500px]">
             <div className="p-6 border-b border-brand-border flex flex-col sm:flex-row justify-between items-start sm:items-center bg-brand-bg/30 gap-4">
-              <h3 className="text-lg font-bold text-brand-text">Recent Reversals</h3>
+              <h3 className="text-lg font-bold text-brand-text">Reversal Request Registry</h3>
               <div className="flex items-center gap-2 w-full sm:w-auto">
                 <div className="relative flex-1 sm:flex-none">
                   <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-brand-text/40" size={14} />
@@ -347,40 +307,41 @@ export function ReversalsPage() {
               <table className="w-full text-left text-sm whitespace-nowrap">
                 <thead className="sticky top-0 bg-brand-panel z-10 shadow-[0_1px_0_var(--color-brand-border)]">
                   <tr className="text-brand-text/50">
-                    <th className="pb-3 pt-4 px-6 font-medium">Time</th>
-                    <th className="pb-3 pt-4 px-6 font-medium">Original Receipt Ref</th>
+                    <th className="pb-3 pt-4 px-6 font-medium">Initiated</th>
+                    <th className="pb-3 pt-4 px-6 font-medium">Original Receipt</th>
                     <th className="pb-3 pt-4 px-6 font-medium">Customer Phone</th>
                     <th className="pb-3 pt-4 px-6 font-medium">Amount (KES)</th>
                     <th className="pb-3 pt-4 px-6 font-medium">Status</th>
+                    <th className="pb-3 pt-4 px-6 font-medium text-center">Payloads</th>
                   </tr>
                 </thead>
                 <tbody>
                   {loading ? (
                     <tr>
-                      <td colSpan={5} className="py-20 text-center">
+                      <td colSpan={6} className="py-20 text-center">
                         <div className="flex flex-col items-center justify-center gap-3">
                           <RefreshCw size={24} className="text-brand-accent animate-spin" />
-                          <span className="text-brand-text/60">Fetching reversals...</span>
+                          <span className="text-brand-text/60">Fetching query log...</span>
                         </div>
                       </td>
                     </tr>
                   ) : error ? (
                     <tr>
-                      <td colSpan={5} className="py-20 text-center text-status-danger">
+                      <td colSpan={6} className="py-20 text-center text-status-danger">
                         Failed to load: {error}
                       </td>
                     </tr>
                   ) : filteredReversals.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="py-20 text-center text-brand-text/40">
+                      <td colSpan={6} className="py-20 text-center text-brand-text/40">
                         No reversal requests logged.
                       </td>
                     </tr>
                   ) : (
                     filteredReversals.map((req) => (
                       <tr key={req.id} className="border-b border-brand-border/50 hover:bg-brand-bg transition-colors">
-                        <td className="py-3 px-6 text-brand-text/70">{formatDate(req.occurred_at)}</td>
-                        <td className="py-3 px-6 font-mono text-brand-text/90">{req.reference || 'N/A'}</td>
+                        <td className="py-3 px-6 text-brand-text/70">{formatDate(req.created_at)}</td>
+                        <td className="py-3 px-6 font-mono text-brand-text/90">{req.original_receipt}</td>
                         <td className="py-3 px-6 font-mono text-brand-text/90">{req.phone_number}</td>
                         <td className="py-3 px-6 font-medium text-brand-text">
                           KES {req.amount.toLocaleString()}
@@ -389,13 +350,25 @@ export function ReversalsPage() {
                           <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold uppercase tracking-wider ${
                             req.status === 'completed' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
                             req.status === 'pending' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' :
+                            req.status === 'processing' ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' :
+                            req.status === 'timeout' ? 'bg-amber-500/10 text-amber-500 border border-amber-500/20' :
                             'bg-rose-500/10 text-rose-400 border border-rose-500/20'
                           }`}>
                             {req.status === 'completed' && <CheckCircle2 size={12} />}
-                            {req.status === 'pending' && <Clock size={12} />}
+                            {(req.status === 'pending' || req.status === 'processing') && <Clock size={12} className="animate-pulse" />}
+                            {req.status === 'timeout' && <Clock size={12} />}
                             {req.status === 'failed' && <XCircle size={12} />}
                             {req.status}
                           </span>
+                        </td>
+                        <td className="py-3 px-6 text-center">
+                          <button
+                            onClick={() => setSelectedItem(req)}
+                            className="p-1 hover:bg-brand-border rounded text-brand-accent transition-colors inline-flex items-center justify-center"
+                            title="Inspect Payloads"
+                          >
+                            <Eye size={16} />
+                          </button>
                         </td>
                       </tr>
                     ))
@@ -406,6 +379,117 @@ export function ReversalsPage() {
           </div>
         </div>
       </div>
+
+      {/* Payload Inspector Modal */}
+      <AnimatePresence>
+        {selectedItem && (
+          <div className="fixed inset-0 bg-brand-bg/85 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-brand-panel border border-brand-border w-full max-w-4xl rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]"
+            >
+              {/* Modal Header */}
+              <div className="p-6 border-b border-brand-border flex justify-between items-center bg-brand-bg/30">
+                <div>
+                  <h3 className="text-lg font-bold text-brand-text">Payload Inspector</h3>
+                  <p className="text-xs text-brand-text/50 font-mono mt-0.5">Query ID: {selectedItem.id}</p>
+                </div>
+                <button
+                  onClick={() => setSelectedItem(null)}
+                  className="p-1.5 hover:bg-brand-border rounded-lg text-brand-text/60 hover:text-brand-text transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              {/* Modal Body */}
+              <div className="p-6 overflow-y-auto space-y-6 flex-1 text-sm">
+                <div className="grid grid-cols-2 gap-4 bg-brand-bg/40 p-4 border border-brand-border rounded-lg">
+                  <div>
+                    <span className="text-brand-text/50 block text-xs uppercase font-semibold">Original Receipt</span>
+                    <span className="text-brand-text font-mono font-medium">{selectedItem.original_receipt}</span>
+                  </div>
+                  <div>
+                    <span className="text-brand-text/50 block text-xs uppercase font-semibold">Reversal Amount</span>
+                    <span className="text-brand-text font-medium">KES {selectedItem.amount.toLocaleString()}</span>
+                  </div>
+                  <div>
+                    <span className="text-brand-text/50 block text-xs uppercase font-semibold">Reason</span>
+                    <span className="text-brand-text">{selectedItem.reason || 'N/A'}</span>
+                  </div>
+                  <div>
+                    <span className="text-brand-text/50 block text-xs uppercase font-semibold">Current State</span>
+                    <span className={`inline-flex items-center gap-1 mt-1 text-xs font-semibold px-2 py-0.5 rounded-full ${
+                      selectedItem.status === 'completed' ? 'bg-emerald-500/10 text-emerald-400' :
+                      selectedItem.status === 'pending' ? 'bg-amber-500/10 text-amber-400' :
+                      selectedItem.status === 'processing' ? 'bg-indigo-500/10 text-indigo-400' :
+                      'bg-rose-500/10 text-rose-400'
+                    }`}>
+                      {selectedItem.status}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Tab Containers for JSON blobs */}
+                <div className="space-y-4">
+                  {/* Tab 1: Outgoing API Request */}
+                  <div className="border border-brand-border rounded-lg overflow-hidden">
+                    <div className="bg-brand-bg/40 px-4 py-2 border-b border-brand-border flex justify-between items-center">
+                      <span className="font-semibold text-brand-text/80 text-xs font-mono">1. OUTGOING DARAJA REQUEST</span>
+                      <button
+                        onClick={() => handleCopy(JSON.stringify(selectedItem.raw_request, null, 2), 'request')}
+                        className="text-xs text-brand-accent flex items-center gap-1 hover:underline"
+                      >
+                        <Copy size={12} />
+                        {copiedSection === 'request' ? 'Copied!' : 'Copy'}
+                      </button>
+                    </div>
+                    <pre className="p-4 bg-brand-bg text-brand-text/90 font-mono text-xs overflow-x-auto max-h-[160px]">
+                      {selectedItem.raw_request ? JSON.stringify(selectedItem.raw_request, null, 2) : '// No request logged'}
+                    </pre>
+                  </div>
+
+                  {/* Tab 2: Immediate response */}
+                  <div className="border border-brand-border rounded-lg overflow-hidden">
+                    <div className="bg-brand-bg/40 px-4 py-2 border-b border-brand-border flex justify-between items-center">
+                      <span className="font-semibold text-brand-text/80 text-xs font-mono">2. DARAJA IMMEDIATE RESPONSE (ACK)</span>
+                      <button
+                        onClick={() => handleCopy(JSON.stringify(selectedItem.raw_response, null, 2), 'response')}
+                        className="text-xs text-brand-accent flex items-center gap-1 hover:underline"
+                      >
+                        <Copy size={12} />
+                        {copiedSection === 'response' ? 'Copied!' : 'Copy'}
+                      </button>
+                    </div>
+                    <pre className="p-4 bg-brand-bg text-brand-text/90 font-mono text-xs overflow-x-auto max-h-[160px]">
+                      {selectedItem.raw_response ? JSON.stringify(selectedItem.raw_response, null, 2) : '// No response logged'}
+                    </pre>
+                  </div>
+
+                  {/* Tab 3: Callback payload */}
+                  <div className="border border-brand-border rounded-lg overflow-hidden">
+                    <div className="bg-brand-bg/40 px-4 py-2 border-b border-brand-border flex justify-between items-center">
+                      <span className="font-semibold text-brand-text/80 text-xs font-mono">3. ASYNCHRONOUS WEBHOOK CALLBACK RESULT</span>
+                      <button
+                        onClick={() => handleCopy(JSON.stringify(selectedItem.raw_result, null, 2), 'result')}
+                        className="text-xs text-brand-accent flex items-center gap-1 hover:underline"
+                      >
+                        <Copy size={12} />
+                        {copiedSection === 'result' ? 'Copied!' : 'Copy'}
+                      </button>
+                    </div>
+                    <pre className="p-4 bg-brand-bg text-brand-text/90 font-mono text-xs overflow-x-auto max-h-[180px]">
+                      {selectedItem.raw_result ? JSON.stringify(selectedItem.raw_result, null, 2) : '// Awaiting callback result from Safaricom...'}
+                    </pre>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
