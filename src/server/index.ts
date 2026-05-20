@@ -20,6 +20,7 @@ import { handleAccountBalanceTimeout } from './services/accountBalance/handleAcc
 import { initiateReversal } from './services/reversal/initiateReversal';
 import { handleReversalResult } from './services/reversal/handleReversalResult';
 import { handleReversalTimeout } from './services/reversal/handleReversalTimeout';
+import { querySTKStatus } from './services/stkQuery/querySTKStatus';
 
 dotenv.config();
 
@@ -229,24 +230,34 @@ app.post('/api/mpesa/stkpush', async (req, res) => {
 });
 
 /**
- * 8. STK PUSH QUERY (Status Check)
+ * 8. STK PUSH QUERY (Status Check + Reconciliation)
  * POST /api/mpesa/stkpush/query
  */
 app.post('/api/mpesa/stkpush/query', async (req, res) => {
-  const { checkoutRequestId } = req.body;
+  const { checkoutRequestId, userId } = req.body;
 
   if (!checkoutRequestId) {
     return res.status(400).json({ error: 'Missing checkoutRequestId parameter.' });
   }
 
   try {
-    const statusResult = await DarajaService.querySTKPush(checkoutRequestId);
-    return res.json(statusResult);
+    const result = await querySTKStatus({ checkoutRequestId, userId });
+
+    if (!result.success) {
+      return res.status(400).json({
+        error: result.error || result.resultDesc,
+        resultCode: result.resultCode,
+        resultDesc: result.resultDesc
+      });
+    }
+
+    return res.json(result);
   } catch (err: any) {
     console.error('[STK Push Query Error]', err);
     return res.status(500).json({ error: err.message });
   }
 });
+
 
 /**
  * STK Push Webhook Callback Endpoint
