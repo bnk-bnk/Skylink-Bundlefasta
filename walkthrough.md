@@ -47,7 +47,7 @@ You can run these tests locally to verify the security and logic flow:
 2. Populate the parameters with your Supabase credentials:
    ```env
    VITE_SUPABASE_URL="https://zrofbcerkfbuouiisjpx.supabase.co"
-   VITE_SUPABASE_ANON_KEY="your-anon-key-here"
+   VITE_SUPABASE_PUBLISHABLE_KEY="sb_publishable_..."
    ```
 3. Run the installation and dev command:
    ```bash

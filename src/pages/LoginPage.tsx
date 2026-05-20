@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Lock, Mail, Key, ArrowLeft, CheckCircle2 } from 'lucide-react';
+import { Lock, Mail, Key, ArrowLeft, CheckCircle2, Eye, EyeOff } from 'lucide-react';
 import { supabase } from '../utils/supabaseClient';
 
 interface LoginPageProps {
@@ -13,6 +13,9 @@ export function LoginPage({ onLoginSuccess }: LoginPageProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [keyword, setKeyword] = useState('');
+  
+  const [showPassword, setShowPassword] = useState(false);
+  const [showKeyword, setShowKeyword] = useState(false);
   
   const [resetEmail, setResetEmail] = useState('');
   const [isResetSent, setIsResetSent] = useState(false);
@@ -33,13 +36,13 @@ export function LoginPage({ onLoginSuccess }: LoginPageProps) {
       });
 
       if (authError) {
-        setError(authError.message || 'Invalid credentials. Please try again.');
+        setError('Invalid email, password, or security keyword.');
         setIsLoading(false);
         return;
       }
 
       if (!authData.session) {
-        setError('Failed to establish session.');
+        setError('Invalid email, password, or security keyword.');
         setIsLoading(false);
         return;
       }
@@ -51,14 +54,14 @@ export function LoginPage({ onLoginSuccess }: LoginPageProps) {
 
       if (rpcError) {
         await supabase.auth.signOut();
-        setError('Keyword verification failed. Please try again.');
+        setError('Invalid email, password, or security keyword.');
         setIsLoading(false);
         return;
       }
 
       if (!keywordValid) {
         await supabase.auth.signOut();
-        setError('Access Denied: Invalid security keyword.');
+        setError('Invalid email, password, or security keyword.');
         setIsLoading(false);
         return;
       }
@@ -67,7 +70,7 @@ export function LoginPage({ onLoginSuccess }: LoginPageProps) {
       sessionStorage.setItem('keyword_verified', 'true');
       onLoginSuccess();
     } catch (err: any) {
-      setError(err?.message || 'An unexpected error occurred.');
+      setError('Invalid email, password, or security keyword.');
       setIsLoading(false);
     }
   };
@@ -176,13 +179,21 @@ export function LoginPage({ onLoginSuccess }: LoginPageProps) {
                   <div className="relative">
                     <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-brand-text/40" size={18} />
                     <input
-                      type="password"
+                      type={showPassword ? 'text' : 'password'}
                       required
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className="w-full bg-brand-bg border border-brand-border rounded-xl py-2.5 pl-10 pr-4 focus:outline-none focus:ring-2 focus:ring-brand-accent focus:border-transparent transition-all sm:text-sm"
+                      className="w-full bg-brand-bg border border-brand-border rounded-xl py-2.5 pl-10 pr-10 focus:outline-none focus:ring-2 focus:ring-brand-accent focus:border-transparent transition-all sm:text-sm"
                       placeholder="Enter your password"
                     />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-brand-text/40 hover:text-brand-text transition-colors"
+                      title={showPassword ? 'Hide password' : 'Show password'}
+                    >
+                      {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
                   </div>
                 </div>
 
@@ -191,13 +202,21 @@ export function LoginPage({ onLoginSuccess }: LoginPageProps) {
                   <div className="relative">
                     <Key className="absolute left-3 top-1/2 -translate-y-1/2 text-brand-text/40" size={18} />
                     <input
-                      type="password"
+                      type={showKeyword ? 'text' : 'password'}
                       required
                       value={keyword}
                       onChange={(e) => setKeyword(e.target.value)}
-                      className="w-full bg-brand-bg border border-brand-border rounded-xl py-2.5 pl-10 pr-4 focus:outline-none focus:ring-2 focus:ring-brand-accent focus:border-transparent transition-all sm:text-sm"
+                      className="w-full bg-brand-bg border border-brand-border rounded-xl py-2.5 pl-10 pr-10 focus:outline-none focus:ring-2 focus:ring-brand-accent focus:border-transparent transition-all sm:text-sm"
                       placeholder="Enter keyword"
                     />
+                    <button
+                      type="button"
+                      onClick={() => setShowKeyword(!showKeyword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-brand-text/40 hover:text-brand-text transition-colors"
+                      title={showKeyword ? 'Hide keyword' : 'Show keyword'}
+                    >
+                      {showKeyword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
                   </div>
                 </div>
 

@@ -17,7 +17,7 @@ Vite requires frontend variables to be prefixed with `VITE_`. These are bundled 
 | Variable Name | Description | Example Value |
 | :--- | :--- | :--- |
 | `VITE_SUPABASE_URL` | Supabase API connection URL | `https://zrofbcerkfbuouiisjpx.supabase.co` |
-| `VITE_SUPABASE_ANON_KEY` | Supabase Client Anonymous Key | `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...` |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | Supabase Client Publishable Key | `sb_publishable_...` |
 
 ---
 
@@ -27,7 +27,7 @@ These variables are private to the server and must **never** be prefix-exposed w
 | Variable Name | Description | Example Value |
 | :--- | :--- | :--- |
 | `PORT` | Local port for Express API backend | `5000` |
-| `SUPABASE_SERVICE_ROLE_KEY` | Supabase admin override key (service role) | `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...` |
+| `SUPABASE_SECRET_KEY` | Supabase admin secret key | `sb_secret_...` |
 | `MPESA_CONSUMER_KEY` | Safaricom Developer portal Consumer Key | `8g3H2k9L1p5S7d...` |
 | `MPESA_CONSUMER_SECRET` | Safaricom Developer portal Consumer Secret | `T7yU8i9O0p1A2s...` |
 | `MPESA_PASSKEY` | M-Pesa Online Passkey for STK push requests | `bfb279f9aa9bdbcf158e97...` |
