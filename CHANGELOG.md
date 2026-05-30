@@ -5,6 +5,14 @@ All notable changes to the Skylink Bundlefasta Dashboard project will be documen
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to Semantic Versioning.
 
+## [1.1.3] - 2026-05-30
+
+### Fixed
+- Fixed B2C Payout `Bad Request - Invalid OriginatorConversationID` error by generating and including a unique `OriginatorConversationID` in the request payload to satisfy Safaricom's v3 API gateway requirements.
+- Fixed Reversal `Bad Request - Invalid RecieverIdentifierType` error by reverting the spelling of `ReceiverIdentifierType` back to `RecieverIdentifierType` (matching the misspelled parameter case validated by Safaricom's endpoint).
+
+---
+
 ## [1.1.2] - 2026-05-30
 
 ### Fixed

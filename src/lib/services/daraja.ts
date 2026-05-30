@@ -369,6 +369,8 @@ export class DarajaService {
 
     const securityCredential = encryptSecurityCredential(config.initiatorPassword || '', config.certificate);
 
+    const originatorConversationId = `B2C_ORI_${crypto.randomBytes(8).toString('hex').toUpperCase()}`;
+
     const payload = {
       InitiatorName: config.initiatorName,
       SecurityCredential: securityCredential,
@@ -379,7 +381,8 @@ export class DarajaService {
       Remarks: params.remarks,
       QueueTimeOutURL: config.b2cTimeoutUrl,
       ResultURL: config.b2cResultUrl,
-      Occasion: 'SkylinkPayout'
+      Occasion: 'SkylinkPayout',
+      OriginatorConversationID: originatorConversationId
     };
 
     const res = await fetch(`${baseUrl}/mpesa/b2c/v3/paymentrequest`, {
@@ -396,7 +399,11 @@ export class DarajaService {
       throw new Error(`Daraja B2C Payout failed: ${errText}`);
     }
 
-    return await res.json();
+    const result = await res.json();
+    return {
+      ...result,
+      OriginatorConversationID: result.OriginatorConversationID || originatorConversationId
+    };
   }
 
   // --- 4. Reversal Request ---
@@ -448,7 +455,7 @@ export class DarajaService {
       TransactionID: params.receiptNumber,
       Amount: params.amount,
       ReceiverParty: config.shortCode,
-      ReceiverIdentifierType: '11', // 11 is for shortcode under reversals
+      RecieverIdentifierType: '11', // 11 is for shortcode under reversals
       QueueTimeOutURL: config.reversalTimeoutUrl,
       ResultURL: config.reversalResultUrl,
       Remarks: params.reason,
