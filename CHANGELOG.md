@@ -5,6 +5,17 @@ All notable changes to the Skylink Bundlefasta Dashboard project will be documen
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to Semantic Versioning.
 
+## [1.1.2] - 2026-05-30
+
+### Fixed
+- Fixed dashboard PIN authorization failure by updating `verifyDashboardPin`, `setDashboardPin`, and `hasPinConfigured` inside [pin.ts](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/lib/repositories/pin.ts) to query the database using the admin client. This correctly bypasses Row Level Security (RLS) policies on the server side.
+- Fixed Safaricom Daraja OAuth token caching bug in [daraja.ts](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/lib/services/daraja.ts). Replaced Turbopack/Next.js fetch disk cache with a memory-level cache store and `cache: 'no-store'` options, preventing expired tokens from being reused.
+
+### Changed
+- Reset credentials for `rainhardbonnke89@gmail.com` to `password123` (Supabase Auth) and PIN `123456` (dashboard_pin) for verification purposes.
+
+---
+
 ## [1.1.1] - 2026-05-30
 
 ### Fixed

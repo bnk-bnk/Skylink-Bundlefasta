@@ -158,8 +158,14 @@ function getTimestamp(): string {
   )}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
 }
 
+let cachedToken: { token: string; expiresAt: number } | null = null;
+
 export class DarajaService {
   private static async getOAuthToken(config: DarajaConfig): Promise<string> {
+    if (cachedToken && Date.now() < cachedToken.expiresAt - 60_000) {
+      return cachedToken.token;
+    }
+
     const baseUrl = config.isSandbox 
       ? 'https://sandbox.safaricom.co.ke' 
       : 'https://api.safaricom.co.ke';
@@ -170,7 +176,7 @@ export class DarajaService {
       headers: {
         Authorization: `Basic ${auth}`,
       },
-      next: { revalidate: 3500 }, // Cache token for ~1 hour
+      cache: 'no-store',
     });
 
     if (!res.ok) {
@@ -179,6 +185,14 @@ export class DarajaService {
     }
 
     const data = await res.json();
+    
+    if (data.access_token && data.expires_in) {
+      cachedToken = {
+        token: data.access_token,
+        expiresAt: Date.now() + Number(data.expires_in) * 1000,
+      };
+    }
+    
     return data.access_token;
   }
 

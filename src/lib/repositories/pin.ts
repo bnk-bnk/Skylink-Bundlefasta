@@ -1,8 +1,8 @@
 import bcrypt from 'bcryptjs';
-import { createClient } from '../supabase/server';
+import { createAdminClient } from '../supabase/server';
 
 export async function verifyDashboardPin(userId: string, pin: string): Promise<boolean> {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   
   const { data, error } = await supabase
     .from('dashboard_pin')
@@ -18,7 +18,7 @@ export async function verifyDashboardPin(userId: string, pin: string): Promise<b
 }
 
 export async function setDashboardPin(userId: string, pin: string): Promise<boolean> {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   const salt = await bcrypt.genSalt(10);
   const pinHash = await bcrypt.hash(pin, salt);
 
@@ -39,7 +39,7 @@ export async function setDashboardPin(userId: string, pin: string): Promise<bool
 }
 
 export async function hasPinConfigured(userId: string): Promise<boolean> {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   const { data, error } = await supabase
     .from('dashboard_pin')
     .select('id')
