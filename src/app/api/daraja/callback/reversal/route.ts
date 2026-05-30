@@ -49,7 +49,13 @@ export async function POST(req: Request) {
         ? (originalTx.direction === 'IN' ? 'OUT' : 'IN')
         : 'OUT';
 
-      const amount = revReq.amount ? Number(revReq.amount) : (originalTx?.amount ? Number(originalTx.amount) : 0);
+      const params = result.ResultParameters?.ResultParameter || [];
+      const amountParam = params.find((p: any) => p.Key === 'Amount');
+      
+      const amount = amountParam 
+        ? Number(amountParam.Value) 
+        : (revReq.amount ? Number(revReq.amount) : (originalTx?.amount ? Number(originalTx.amount) : 0));
+        
       const phoneNumber = originalTx?.phone_number || null;
 
       await createTransaction({

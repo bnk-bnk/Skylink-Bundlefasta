@@ -36,7 +36,7 @@ export async function POST(req: Request) {
     // 2. Log in transaction ledger if successful
     if (ResultCode === 0 && b2cReq) {
       const params = result.ResultParameters?.ResultParameter || [];
-      const amountParam = params.find((p: any) => p.Name === 'TransactionAmount');
+      const amountParam = params.find((p: any) => p.Key === 'TransactionAmount');
       const amount = amountParam ? Number(amountParam.Value) : Number(b2cReq.amount);
 
       await createTransaction({

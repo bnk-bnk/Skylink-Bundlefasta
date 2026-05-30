@@ -219,7 +219,7 @@ export class DarajaService {
       const conversationId = `B2C_CON_${crypto.randomBytes(8).toString('hex')}`;
       const originatorConversationId = `B2C_ORI_${crypto.randomBytes(8).toString('hex')}`;
 
-      // Simulate B2C Callback
+      // Simulate B2C Callback using Key/Value format
       this.triggerMockCallback('b2c', {
         Result: {
           ResultType: 0,
@@ -230,9 +230,9 @@ export class DarajaService {
           TransactionID: `OBC${crypto.randomBytes(5).toString('hex').toUpperCase()}`,
           ResultParameters: {
             ResultParameter: [
-              { Name: 'TransactionAmount', Value: params.amount },
-              { Name: 'ReceiverPartyPublicName', Value: formattedPhone },
-              { Name: 'TransactionReceipt', Value: `NL${crypto.randomBytes(4).toString('hex').toUpperCase()}8D9` }
+              { Key: 'TransactionAmount', Value: params.amount },
+              { Key: 'ReceiverPartyPublicName', Value: formattedPhone },
+              { Key: 'TransactionReceipt', Value: `NL${crypto.randomBytes(4).toString('hex').toUpperCase()}8D9` }
             ]
           }
         }
@@ -252,18 +252,18 @@ export class DarajaService {
 
     const payload = {
       InitiatorName: config.initiatorName,
-      SecurityCredential: config.initiatorPassword, // In prod, this must be encrypted using Daraja initiator public key certificate
-      CommandID: 'PromotionPayment', // or SalaryPayment / BusinessPayment
+      SecurityCredential: config.initiatorPassword,
+      CommandID: 'PromotionPayment',
       Amount: params.amount,
       PartyA: config.shortCode,
       PartyB: formattedPhone,
       Remarks: params.remarks,
       QueueTimeOutURL: `${config.callbackUrlBase}/api/daraja/callback/b2c-timeout`,
       ResultURL: `${config.callbackUrlBase}/api/daraja/callback/b2c`,
-      Occasion: 'SkylinkPayout'
+      Occassion: 'SkylinkPayout'
     };
 
-    const res = await fetch(`${baseUrl}/mpesa/b2c/v1/paymentrequest`, {
+    const res = await fetch(`${baseUrl}/mpesa/b2c/v3/paymentrequest`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -291,7 +291,7 @@ export class DarajaService {
     if (!config) {
       const conversationId = `REV_CON_${crypto.randomBytes(8).toString('hex')}`;
       
-      // Simulate Reversal Callback
+      // Simulate Reversal Callback using Key/Value format
       this.triggerMockCallback('reversal', {
         Result: {
           ResultType: 0,
@@ -302,8 +302,8 @@ export class DarajaService {
           TransactionID: `REV${crypto.randomBytes(5).toString('hex').toUpperCase()}`,
           ResultParameters: {
             ResultParameter: [
-              { Name: 'Amount', Value: params.amount },
-              { Name: 'Receipt', Value: params.receiptNumber }
+              { Key: 'Amount', Value: params.amount },
+              { Key: 'Receipt', Value: params.receiptNumber }
             ]
           }
         }
@@ -327,7 +327,7 @@ export class DarajaService {
       TransactionID: params.receiptNumber,
       Amount: params.amount,
       ReceiverParty: config.shortCode,
-      RecieverIdentifierType: '4', // 4 is for Shortcode
+      RecieverIdentifierType: '11', // 11 is for shortcode under reversals
       QueueTimeOutURL: `${config.callbackUrlBase}/api/daraja/callback/reversal-timeout`,
       ResultURL: `${config.callbackUrlBase}/api/daraja/callback/reversal`,
       Remarks: params.reason,
@@ -356,11 +356,35 @@ export class DarajaService {
     const config = getEnvConfig();
 
     if (!config) {
-      // In Mock Mode, generate a random realistic balance
       const newMockBalance = 150000 + Math.random() * 20000;
+      
+      // Trigger async mock callback for balance to populate balance snapshots
+      this.triggerMockCallback('balance', {
+        Result: {
+          ResultType: 0,
+          ResultCode: 0,
+          ResultDesc: 'The service request is processed successfully',
+          OriginatorConversationID: `BAL_ORI_${crypto.randomBytes(8).toString('hex')}`,
+          ConversationID: `BAL_CON_${crypto.randomBytes(8).toString('hex')}`,
+          TransactionID: `BAL${crypto.randomBytes(5).toString('hex').toUpperCase()}`,
+          ResultParameters: {
+            ResultParameter: [
+              {
+                Key: 'AccountBalance',
+                Value: `Working Account|KES|${newMockBalance.toFixed(2)}|${newMockBalance.toFixed(2)}|0.00|0.00&Float Account|KES|0.00|0.00|0.00|0.00&Utility Account|KES|${(newMockBalance - 2500).toFixed(2)}|${(newMockBalance - 2500).toFixed(2)}|0.00|0.00`
+              },
+              {
+                Key: 'BOCompletedTime',
+                Value: new Date().toISOString().replace(/[-:T.Z]/g, '').slice(0, 14)
+              }
+            ]
+          }
+        }
+      });
+
       return {
         isMock: true,
-        balance: Number(newMockBalance.toFixed(2)),
+        balance: Number((newMockBalance - 2500).toFixed(2)), // Default to Utility Balance
       };
     }
 
@@ -396,7 +420,7 @@ export class DarajaService {
   }
 
   // Helper function to mock asynchronous callbacks from Safaricom locally
-  private static triggerMockCallback(type: 'stk' | 'b2c' | 'reversal', payload: any) {
+  private static triggerMockCallback(type: 'stk' | 'b2c' | 'reversal' | 'balance', payload: any) {
     setTimeout(async () => {
       try {
         const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';

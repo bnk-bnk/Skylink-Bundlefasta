@@ -5,6 +5,7 @@ import { Send, AlertTriangle, ShieldCheck, CheckCircle2, AlertCircle } from 'luc
 import { sendB2cAction } from '@/app/actions';
 import { createClient } from '@/lib/supabase/client';
 import PinConfirmModal from '../shared/PinConfirmModal';
+import { getB2cErrorMessage } from '@/lib/services/darajaErrors';
 
 export default function B2cView() {
   const [phone, setPhone] = useState('254708374149');
@@ -187,29 +188,61 @@ export default function B2cView() {
                   </td>
                 </tr>
               ) : (
-                recentB2c.map((req) => (
-                  <tr key={req.id} className="hover:bg-background/30 transition-colors">
-                    <td className="py-3 px-3 text-muted-main font-mono">
-                      {new Date(req.created_at).toLocaleDateString()} {new Date(req.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </td>
-                    <td className="py-3 px-3 font-mono">{req.phone_number}</td>
-                    <td className="py-3 px-3 font-mono font-bold text-danger">
-                      KES {Number(req.amount).toFixed(2)}
-                    </td>
-                    <td className="py-3 px-3 truncate max-w-[150px]">{req.remarks || '-'}</td>
-                    <td className="py-3 px-3">
-                      <span className={`inline-flex items-center text-[10px] font-semibold px-1.5 py-0.5 rounded ${
-                        req.status === 'SUCCESS'
-                          ? 'text-success-main bg-success-main/10'
-                          : req.status === 'PENDING'
-                            ? 'text-warning-main bg-warning-main/10'
-                            : 'text-danger bg-danger/10'
-                      }`}>
-                        {req.status}
-                      </span>
-                    </td>
-                  </tr>
-                ))
+                recentB2c.map((req) => {
+                  const getFailureDetails = () => {
+                    if (req.status !== 'FAILED') return null;
+                    const payload = req.response_payload;
+                    const resultCode = payload?.Result?.ResultCode;
+                    const resultDesc = payload?.Result?.ResultDesc;
+                    const errorCode = payload?.errorCode;
+                    const errorMessage = payload?.errorMessage;
+
+                    if (resultCode !== undefined && resultCode !== null) {
+                      return {
+                        code: String(resultCode),
+                        desc: getB2cErrorMessage(resultCode) || resultDesc
+                      };
+                    }
+                    if (errorCode) {
+                      return {
+                        code: errorCode,
+                        desc: errorMessage || 'API request rejected.'
+                      };
+                    }
+                    return null;
+                  };
+
+                  const failDetails = getFailureDetails();
+
+                  return (
+                    <tr key={req.id} className="hover:bg-background/30 transition-colors">
+                      <td className="py-3 px-3 text-muted-main font-mono">
+                        {new Date(req.created_at).toLocaleDateString()} {new Date(req.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </td>
+                      <td className="py-3 px-3 font-mono">{req.phone_number}</td>
+                      <td className="py-3 px-3 font-mono font-bold text-danger">
+                        KES {Number(req.amount).toFixed(2)}
+                      </td>
+                      <td className="py-3 px-3 truncate max-w-[150px]">{req.remarks || '-'}</td>
+                      <td className="py-3 px-3">
+                        <span className={`inline-flex items-center text-[10px] font-semibold px-1.5 py-0.5 rounded ${
+                          req.status === 'SUCCESS'
+                            ? 'text-success-main bg-success-main/10'
+                            : req.status === 'PENDING'
+                              ? 'text-warning-main bg-warning-main/10'
+                              : 'text-danger bg-danger/10'
+                        }`}>
+                          {req.status}
+                        </span>
+                        {failDetails && (
+                          <div className="text-[9px] text-danger/80 mt-1 max-w-[150px] leading-tight font-medium" title={failDetails.desc}>
+                            Code {failDetails.code}: {failDetails.desc}
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
