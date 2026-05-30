@@ -1,6 +1,6 @@
 export type TransactionDirection = 'IN' | 'OUT';
-export type TransactionType = 'C2B' | 'STK' | 'B2C' | 'REVERSAL';
-export type TransactionStatus = 'PENDING' | 'SUCCESS' | 'FAILED' | 'CANCELLED';
+export type TransactionType = 'C2B' | 'STK' | 'B2C' | 'REVERSAL' | 'B2B';
+export type TransactionStatus = 'PENDING' | 'SUCCESS' | 'FAILED' | 'CANCELLED' | 'TIMEOUT';
 
 export interface Database {
   public: {
@@ -266,6 +266,126 @@ export interface Database {
           created_at?: string;
         };
       };
+      b2b_requests: {
+        Row: {
+          id: string;
+          amount: number;
+          destination_shortcode: string;
+          destination_type: string;
+          command_id: string;
+          account_reference: string;
+          remarks: string | null;
+          conversation_id: string | null;
+          originator_conversation_id: string | null;
+          result_code: number | null;
+          result_description: string | null;
+          status: string;
+          response_payload: any | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          amount: number;
+          destination_shortcode: string;
+          destination_type: string;
+          command_id: string;
+          account_reference: string;
+          remarks?: string | null;
+          conversation_id?: string | null;
+          originator_conversation_id?: string | null;
+          result_code?: number | null;
+          result_description?: string | null;
+          status?: string;
+          response_payload?: any | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          amount?: number;
+          destination_shortcode?: string;
+          destination_type?: string;
+          command_id?: string;
+          account_reference?: string;
+          remarks?: string | null;
+          conversation_id?: string | null;
+          originator_conversation_id?: string | null;
+          result_code?: number | null;
+          result_description?: string | null;
+          status?: string;
+          response_payload?: any | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      settlement_rules: {
+        Row: {
+          id: string;
+          source_reference: string;
+          rule_type: string;
+          percentage: number | null;
+          fixed_amount: number | null;
+          destination_shortcode: string;
+          destination_type: string;
+          active: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          source_reference: string;
+          rule_type: string;
+          percentage?: number | null;
+          fixed_amount?: number | null;
+          destination_shortcode: string;
+          destination_type: string;
+          active?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          source_reference?: string;
+          rule_type?: string;
+          percentage?: number | null;
+          fixed_amount?: number | null;
+          destination_shortcode?: string;
+          destination_type?: string;
+          active?: boolean;
+          created_at?: string;
+        };
+      };
+      settlement_queue: {
+        Row: {
+          id: string;
+          transaction_id: string | null;
+          settlement_rule_id: string | null;
+          amount: number;
+          status: string;
+          attempts: number;
+          created_at: string;
+          processed_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          transaction_id?: string | null;
+          settlement_rule_id?: string | null;
+          amount: number;
+          status?: string;
+          attempts?: number;
+          created_at?: string;
+          processed_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          transaction_id?: string | null;
+          settlement_rule_id?: string | null;
+          amount?: number;
+          status?: string;
+          attempts?: number;
+          created_at?: string;
+          processed_at?: string | null;
+        };
+      };
       audit_logs: {
         Row: {
           id: string;
@@ -303,4 +423,7 @@ export type B2cRequest = Database['public']['Tables']['b2c_requests']['Row'];
 export type ReversalRequest = Database['public']['Tables']['reversal_requests']['Row'];
 export type ReconciliationRecord = Database['public']['Tables']['reconciliation_records']['Row'];
 export type AuditLog = Database['public']['Tables']['audit_logs']['Row'];
+export type B2bRequest = Database['public']['Tables']['b2b_requests']['Row'];
+export type SettlementRule = Database['public']['Tables']['settlement_rules']['Row'];
+export type SettlementQueue = Database['public']['Tables']['settlement_queue']['Row'];
 

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createTransaction } from '@/lib/repositories/transactions';
 import { createAdminClient } from '@/lib/supabase/server';
 import { logSystemAudit } from '@/lib/repositories/audit';
+import { triggerSettlementRule } from '@/lib/repositories/b2b';
 
 export async function POST(req: Request) {
   try {
@@ -37,6 +38,11 @@ export async function POST(req: Request) {
       description: `C2B PayBill payment - Type: ${TransactionType || 'Pay Bill'}`,
       raw_payload: payload,
     });
+
+    // Trigger settlement rules calculation
+    if (transaction && transaction.id) {
+      await triggerSettlementRule(transaction.id, transaction.account_reference, transaction.amount);
+    }
 
     // Write a balance snapshot if OrgAccountBalance is available
     if (OrgAccountBalance) {

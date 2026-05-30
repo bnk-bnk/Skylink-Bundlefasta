@@ -13,6 +13,7 @@ import ReversalsView from '@/components/views/ReversalsView';
 import AnalyticsView from '@/components/views/AnalyticsView';
 import AuditView from '@/components/views/AuditView';
 import SettingsView from '@/components/views/SettingsView';
+import SettlementView from '@/components/views/SettlementView';
 
 export default function DashboardRootPage() {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -31,6 +32,8 @@ export default function DashboardRootPage() {
         return <B2cView />;
       case 'reversals':
         return <ReversalsView />;
+      case 'settlement':
+        return <SettlementView />;
       case 'analytics':
         return <AnalyticsView />;
       case 'audit':

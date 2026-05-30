@@ -7,6 +7,15 @@ import { verifyDashboardPin, setDashboardPin, hasPinConfigured } from '@/lib/rep
 import { logAudit } from '@/lib/repositories/audit';
 import { DarajaService } from '@/lib/services/daraja';
 import { revalidatePath } from 'next/cache';
+import {
+  createB2bRequest,
+  getB2bStats,
+  getB2bRequests,
+  getSettlementRules,
+  createSettlementRule,
+  deleteSettlementRule,
+  getSettlementQueue,
+} from '@/lib/repositories/b2b';
 
 // Helper to check user auth
 async function checkAuth() {
@@ -431,4 +440,160 @@ export async function updatePasswordAction(password: string) {
 
   await logAudit('PASSWORD_CHANGED');
   return { success: true };
+}
+
+// 16. B2B Settlement Actions
+export async function initiateB2bAction(params: {
+  destinationType: 'Till' | 'PayBill';
+  destinationShortcode: string;
+  amount: number;
+  accountReference: string;
+  remarks: string;
+  pin: string;
+}) {
+  const user = await checkAuth();
+
+  // 1. Confirm PIN first
+  const isPinValid = await verifyDashboardPin(user.id, params.pin);
+  if (!isPinValid) {
+    await logAudit('B2B_SETTLEMENT_BLOCKED_BAD_PIN', { destination: params.destinationShortcode, amount: params.amount });
+    return { success: false, error: 'Incorrect Dashboard PIN' };
+  }
+
+  const adminSupabase = createAdminClient();
+
+  try {
+    // 2. Fetch latest balance snapshot to check funds availability
+    const { data: balanceData } = await adminSupabase
+      .from('balance_snapshots')
+      .select('balance')
+      .order('fetched_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const currentBalance = balanceData?.balance || 0;
+    if (currentBalance < params.amount) {
+      await logAudit('B2B_SETTLEMENT_BLOCKED_INSUFFICIENT_BALANCE', {
+        amount: params.amount,
+        balance: currentBalance,
+      });
+      return {
+        success: false,
+        error: `Insufficient funds. Current balance is KES ${currentBalance.toLocaleString()}. Requested settlement is KES ${params.amount.toLocaleString()}.`,
+      };
+    }
+
+    // 3. Create database record FIRST (PENDING state)
+    const commandId = params.destinationType === 'Till' ? 'BusinessBuyGoods' : 'BusinessPayBill';
+    const dbRecord = await createB2bRequest({
+      amount: params.amount,
+      destination_shortcode: params.destinationShortcode,
+      destination_type: params.destinationType,
+      command_id: commandId,
+      account_reference: params.accountReference,
+      remarks: params.remarks,
+      status: 'PENDING',
+    });
+
+    // 4. Call Daraja
+    let res;
+    try {
+      res = await DarajaService.initiateB2b({
+        destinationType: params.destinationType,
+        destinationShortcode: params.destinationShortcode,
+        amount: params.amount,
+        accountReference: params.accountReference,
+        remarks: params.remarks,
+      });
+    } catch (apiError: any) {
+      // If Daraja fails, update B2B request status to FAILED
+      await adminSupabase
+        .from('b2b_requests')
+        .update({
+          status: 'FAILED',
+          result_description: apiError.message || 'API Call failed',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', dbRecord.id);
+
+      await logAudit('B2B_SETTLEMENT_API_FAILED', {
+        id: dbRecord.id,
+        error: apiError.message,
+      });
+
+      throw apiError;
+    }
+
+    // 5. Update B2B request with conversation ids from Daraja API response
+    const { data: updatedRecord, error: updateErr } = await adminSupabase
+      .from('b2b_requests')
+      .update({
+        conversation_id: res.ConversationID || null,
+        originator_conversation_id: res.OriginatorConversationID || null,
+        response_payload: res,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', dbRecord.id)
+      .select()
+      .single();
+
+    if (updateErr) throw updateErr;
+
+    await logAudit('B2B_SETTLEMENT_INITIATED', {
+      id: dbRecord.id,
+      destination: params.destinationShortcode,
+      amount: params.amount,
+      conversationId: res.ConversationID,
+    });
+
+    return { success: true, data: updatedRecord };
+  } catch (error: any) {
+    console.error('B2B Settlement action failed:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+export async function getB2bStatsAction() {
+  await checkAuth();
+  return await getB2bStats();
+}
+
+export async function getB2bRequestsAction(filters: { status?: string; destinationType?: string; limit?: number; offset?: number } = {}) {
+  await checkAuth();
+  return await getB2bRequests(filters);
+}
+
+export async function getSettlementRulesAction() {
+  await checkAuth();
+  return await getSettlementRules();
+}
+
+export async function createSettlementRuleAction(rule: {
+  source_reference: string;
+  rule_type: string;
+  percentage?: number | null;
+  fixed_amount?: number | null;
+  destination_shortcode: string;
+  destination_type: string;
+}) {
+  await checkAuth();
+  const res = await createSettlementRule(rule);
+  await logAudit('SETTLEMENT_RULE_CREATED', {
+    ruleId: res.id,
+    source: rule.source_reference,
+    type: rule.rule_type,
+  });
+  return res;
+}
+
+export async function deleteSettlementRuleAction(id: string) {
+  await checkAuth();
+  await deleteSettlementRule(id);
+  await logAudit('SETTLEMENT_RULE_DELETED', { ruleId: id });
+  return true;
+}
+
+export async function getSettlementQueueAction() {
+  await checkAuth();
+  return await getSettlementQueue();
 }

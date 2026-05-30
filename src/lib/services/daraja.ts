@@ -19,6 +19,8 @@ interface DarajaConfig {
   reversalTimeoutUrl: string;
   balanceResultUrl: string;
   balanceTimeoutUrl: string;
+  b2bResultUrl: string;
+  b2bTimeoutUrl: string;
 }
 
 // Function to load the RSA public key certificate from environment or local root filesystem
@@ -141,6 +143,8 @@ const getEnvConfig = (): DarajaConfig | null => {
     reversalTimeoutUrl: sanitizeCallbackUrl(process.env.DARAJA_REVERSAL_TIMEOUT_URL || `${callbackUrlBase}/api/daraja/callback/reversal-timeout`),
     balanceResultUrl: sanitizeCallbackUrl(process.env.DARAJA_BALANCE_RESULT_URL || `${callbackUrlBase}/api/daraja/callback/balance`),
     balanceTimeoutUrl: sanitizeCallbackUrl(process.env.DARAJA_BALANCE_TIMEOUT_URL || `${callbackUrlBase}/api/daraja/callback/balance-timeout`),
+    b2bResultUrl: sanitizeCallbackUrl(process.env.DARAJA_B2B_RESULT_URL || `${callbackUrlBase}/api/mpesa/b2b/result`),
+    b2bTimeoutUrl: sanitizeCallbackUrl(process.env.DARAJA_B2B_TIMEOUT_URL || `${callbackUrlBase}/api/mpesa/b2b/timeout`),
   };
 };
 
@@ -549,12 +553,95 @@ export class DarajaService {
     return await res.json();
   }
 
+  // --- 6. B2B Settlement Payout ---
+  static async initiateB2b(params: {
+    destinationType: 'Till' | 'PayBill';
+    destinationShortcode: string;
+    amount: number;
+    accountReference: string;
+    remarks: string;
+  }) {
+    const config = getEnvConfig();
+
+    const commandId = params.destinationType === 'Till' ? 'BusinessBuyGoods' : 'BusinessPayBill';
+    const receiverIdentifierType = params.destinationType === 'Till' ? '2' : '4';
+
+    if (!config) {
+      const conversationId = `B2B_CON_${crypto.randomBytes(8).toString('hex')}`;
+      const originatorConversationId = `B2B_ORI_${crypto.randomBytes(8).toString('hex')}`;
+
+      // Simulate B2B Callback
+      this.triggerMockCallback('b2b', {
+        Result: {
+          ResultType: 0,
+          ResultCode: 0,
+          ResultDesc: 'The service request is processed successfully.',
+          OriginatorConversationID: originatorConversationId,
+          ConversationID: conversationId,
+          TransactionID: `B2B${crypto.randomBytes(5).toString('hex').toUpperCase()}`,
+          ResultParameters: {
+            ResultParameter: [
+              { Key: 'InitiatorAccountCurrentBalance', Value: 950000 },
+              { Key: 'TransactionReceipt', Value: `NL${crypto.randomBytes(4).toString('hex').toUpperCase()}8D9` }
+            ]
+          }
+        }
+      });
+
+      return {
+        isMock: true,
+        ConversationID: conversationId,
+        OriginatorConversationID: originatorConversationId,
+        ResponseCode: '0',
+        ResponseDescription: 'Accept the service request successfully.'
+      };
+    }
+
+    const token = await this.getOAuthToken(config);
+    const baseUrl = config.isSandbox ? 'https://sandbox.safaricom.co.ke' : 'https://api.safaricom.co.ke';
+
+    const securityCredential = encryptSecurityCredential(config.initiatorPassword || '', config.certificate);
+
+    const payload = {
+      Initiator: config.initiatorName,
+      SecurityCredential: securityCredential,
+      CommandID: commandId,
+      SenderIdentifierType: '4', // Shortcode
+      RecieverIdentifierType: receiverIdentifierType,
+      Amount: params.amount,
+      PartyA: config.shortCode,
+      PartyB: params.destinationShortcode,
+      AccountReference: params.accountReference,
+      Remarks: params.remarks,
+      QueueTimeOutURL: config.b2bTimeoutUrl,
+      ResultURL: config.b2bResultUrl,
+    };
+
+    const res = await fetch(`${baseUrl}/mpesa/b2b/v1/paymentrequest`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`Daraja B2B Payment failed: ${errText}`);
+    }
+
+    return await res.json();
+  }
+
   // Helper function to mock asynchronous callbacks from Safaricom locally
-  private static triggerMockCallback(type: 'stk' | 'b2c' | 'reversal' | 'balance', payload: any) {
+  private static triggerMockCallback(type: 'stk' | 'b2c' | 'reversal' | 'balance' | 'b2b', payload: any) {
     setTimeout(async () => {
       try {
         const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-        const callbackEndpoint = `${appUrl}/api/daraja/callback/${type}`;
+        const callbackEndpoint = type === 'b2b'
+          ? `${appUrl}/api/mpesa/b2b/result`
+          : `${appUrl}/api/daraja/callback/${type}`;
         
         await fetch(callbackEndpoint, {
           method: 'POST',

@@ -5,6 +5,23 @@ All notable changes to the Skylink Bundlefasta Dashboard project will be documen
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to Semantic Versioning.
 
+## [1.2.0] - 2026-05-30
+
+### Added
+- Created B2B database repository [b2b.ts](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/lib/repositories/b2b.ts) managing B2B requests storage, rule configurations, and calculated queue calculations.
+- Created webhook result callback [route.ts](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/app/api/mpesa/b2b/result/route.ts) with strict idempotency checking and direct output unified transaction ledger logging.
+- Created webhook timeout callback [route.ts](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/app/api/mpesa/b2b/timeout/route.ts) to mark pending requests as TIMEOUT.
+- Developed mobile-first [SettlementView.tsx](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/components/views/SettlementView.tsx) UI component containing stats cards, B2B initiation form, dashboard PIN confirmations, rule creator manager, and calculated queue preview logs.
+- Added Settlement page sidebar and mobile operations layout mappings in [Shell.tsx](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/components/layout/Shell.tsx) and [page.tsx](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/app/dashboard/page.tsx).
+
+### Changed
+- Refactored [daraja.ts](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/lib/services/daraja.ts) to add the `initiateB2b` method, mapping automatically to `BusinessBuyGoods` or `BusinessPayBill` command IDs and sandbox or production gateways.
+- Updated [actions.ts](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/app/actions.ts) to expose B2B server actions for manual settlement dispatches, pre-flight operator PIN verifications, and funds balance availability checks.
+- Integrated settlement splitting rule calculation triggers into successful incoming STK [route.ts](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/app/api/daraja/callback/stk/route.ts) and C2B [route.ts](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/app/api/daraja/callback/c2b/route.ts) webhook handlers.
+- Overhauled [AnalyticsView.tsx](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/components/views/AnalyticsView.tsx) with a dedicated Settlement Engine Analytics panel containing total volumes, success/failure rates, Settlements By Day, Settlements By Destination, and Settlements By Source charts.
+
+---
+
 ## [1.1.6] - 2026-05-30
 
 ### Added

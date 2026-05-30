@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
 import { createTransaction } from '@/lib/repositories/transactions';
 import { logSystemAudit } from '@/lib/repositories/audit';
+import { triggerSettlementRule } from '@/lib/repositories/b2b';
 
 export async function POST(req: Request) {
   try {
@@ -43,7 +44,7 @@ export async function POST(req: Request) {
       const amount = amountItem ? Number(amountItem.Value) : Number(stkReq.amount);
       const phoneNumber = phoneItem ? String(phoneItem.Value) : String(stkReq.phone_number);
 
-      await createTransaction({
+      const txnRecord = await createTransaction({
         direction: 'IN',
         transaction_type: 'STK',
         account_reference: stkReq.account_reference,
@@ -56,6 +57,11 @@ export async function POST(req: Request) {
         description: ResultDesc || 'STK Push Completed successfully',
         raw_payload: payload,
       });
+
+      // Trigger settlement rules calculation
+      if (txnRecord && txnRecord.id) {
+        await triggerSettlementRule(txnRecord.id, txnRecord.account_reference, txnRecord.amount);
+      }
 
       await logSystemAudit('STK_PUSH_CALLBACK_SUCCESS', {
         checkoutRequestId: CheckoutRequestID,

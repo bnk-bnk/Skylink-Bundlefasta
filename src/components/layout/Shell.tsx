@@ -20,7 +20,8 @@ import {
   Menu,
   CreditCard,
   Plus,
-  Settings
+  Settings,
+  Layers
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 
@@ -111,6 +112,7 @@ export default function Shell({ activeTab, setActiveTab, children }: ShellProps)
     { id: 'stk', name: 'STK Push', icon: ArrowUpRight },
     { id: 'b2c', name: 'B2C Payout', icon: ArrowDownLeft },
     { id: 'reversals', name: 'Reversals', icon: Scale },
+    { id: 'settlement', name: 'Settlement', icon: Layers },
     { id: 'analytics', name: 'Analytics', icon: TrendingUp },
     { id: 'audit', name: 'Audit Logs', icon: History },
     { id: 'settings', name: 'Settings', icon: Settings },
@@ -285,7 +287,7 @@ export default function Shell({ activeTab, setActiveTab, children }: ShellProps)
           {mobileNavItems.map((item) => {
             const Icon = item.icon;
             const isSelected = item.id === 'stk'
-              ? (activeTab === 'stk' || activeTab === 'b2c' || activeTab === 'reversals' || activeTab === 'balance')
+              ? (activeTab === 'stk' || activeTab === 'b2c' || activeTab === 'reversals' || activeTab === 'balance' || activeTab === 'settlement')
               : activeTab === item.id;
 
             return (

@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { TrendingUp, BarChart3, PieChart as PieIcon, ArrowUpRight, ArrowDownLeft, Calendar, Filter, RefreshCw, Layers } from 'lucide-react';
-import { getAnalyticsTransactionsAction } from '@/app/actions';
+import { getAnalyticsTransactionsAction, getB2bStatsAction, getB2bRequestsAction } from '@/app/actions';
 import {
   ResponsiveContainer,
   AreaChart,
@@ -50,6 +50,23 @@ export default function AnalyticsView() {
     channelDistribution: [],
     transactionFlow: [],
     peakHours: []
+  });
+
+  const [b2bKpis, setB2bKpis] = useState({
+    totalSettledToday: 0,
+    totalSettledMonth: 0,
+    successRate: 0,
+    failureRate: 0
+  });
+
+  const [b2bCharts, setB2bCharts] = useState<{
+    settlementsByDay: any[];
+    settlementsByDest: any[];
+    settlementsBySource: any[];
+  }>({
+    settlementsByDay: [],
+    settlementsByDest: [],
+    settlementsBySource: []
   });
 
   const loadAnalytics = async () => {
@@ -214,6 +231,85 @@ export default function AnalyticsView() {
         channelDistribution: channelDistribution.length > 0 ? channelDistribution : [{ name: 'No Activity', value: 0.1 }],
         transactionFlow: Object.values(dailyMap),
         peakHours: hourlyCounts
+      });
+
+      // 6. Calculate B2B Settlement Analytics
+      const b2bStatsData = await getB2bStatsAction();
+      const b2bReqs = await getB2bRequestsAction({ limit: 1000 });
+
+      setB2bKpis({
+        totalSettledToday: b2bStatsData.totalSettledToday,
+        totalSettledMonth: b2bStatsData.totalSettledMonth,
+        successRate: b2bStatsData.successRate,
+        failureRate: b2bStatsData.failureRate
+      });
+
+      // B2B Settlements By Day Map
+      const b2bDailyMap: { [key: string]: { date: string; volume: number } } = {};
+      if (dateRange === 'today') {
+        for (let h = 0; h < 24; h += 2) {
+          const label = `${String(h).padStart(2, '0')}:00`;
+          b2bDailyMap[label] = { date: label, volume: 0 };
+        }
+      } else {
+        const daysToSeed = dateRange === '7days' ? 7 : Math.max(1, Math.round((currentEnd.getTime() - currentStart.getTime()) / (24 * 3600 * 1000)));
+        for (let i = daysToSeed - 1; i >= 0; i--) {
+          const d = new Date();
+          d.setDate(now.getDate() - i);
+          const dateStr = d.toLocaleDateString('en-KE', { month: 'short', day: 'numeric' });
+          b2bDailyMap[dateStr] = { date: dateStr, volume: 0 };
+        }
+      }
+
+      // Filter successful within the active range
+      const successfulB2bs = b2bReqs.filter((r: any) => {
+        const time = new Date(r.created_at).getTime();
+        return r.status === 'SUCCESS' && time >= currentStart.getTime() && time <= currentEnd.getTime();
+      });
+
+      successfulB2bs.forEach((r: any) => {
+        const dateObj = new Date(r.created_at);
+        if (dateRange === 'today') {
+          const hour = dateObj.getHours();
+          const bucketHour = Math.floor(hour / 2) * 2;
+          const label = `${String(bucketHour).padStart(2, '0')}:00`;
+          if (b2bDailyMap[label]) {
+            b2bDailyMap[label].volume += Number(r.amount);
+          }
+        } else {
+          const dateStr = dateObj.toLocaleDateString('en-KE', { month: 'short', day: 'numeric' });
+          if (b2bDailyMap[dateStr]) {
+            b2bDailyMap[dateStr].volume += Number(r.amount);
+          }
+        }
+      });
+
+      // B2B Settlements By Destination
+      const b2bDestMap: { [key: string]: number } = {};
+      successfulB2bs.forEach((r: any) => {
+        const dest = r.destination_shortcode;
+        b2bDestMap[dest] = (b2bDestMap[dest] || 0) + Number(r.amount);
+      });
+      const settlementsByDest = Object.entries(b2bDestMap).map(([name, value]) => ({
+        name,
+        value
+      })).sort((a, b) => b.value - a.value).slice(0, 5);
+
+      // B2B Settlements By Source
+      const b2bSourceMap: { [key: string]: number } = {};
+      successfulB2bs.forEach((r: any) => {
+        const src = r.account_reference || 'UNKNOWN';
+        b2bSourceMap[src] = (b2bSourceMap[src] || 0) + Number(r.amount);
+      });
+      const settlementsBySource = Object.entries(b2bSourceMap).map(([name, volume]) => ({
+        name,
+        volume
+      })).sort((a, b) => b.volume - a.volume);
+
+      setB2bCharts({
+        settlementsByDay: Object.values(b2bDailyMap),
+        settlementsByDest: settlementsByDest.length > 0 ? settlementsByDest : [{ name: 'None', value: 0.1 }],
+        settlementsBySource: settlementsBySource
       });
 
     } catch (err) {
@@ -491,6 +587,128 @@ export default function AnalyticsView() {
               </div>
             </div>
 
+          </div>
+
+          {/* SETTLEMENT ENGINE ANALYTICS SECTION */}
+          <hr className="border-border-main my-8" />
+          <div className="mb-6">
+            <div className="flex items-center gap-2 mb-1">
+              <Layers size={20} className="text-warning-main shrink-0" />
+              <h3 className="font-bold text-base tracking-tight">Settlement Engine Analytics</h3>
+            </div>
+            <p className="text-xs text-muted-main">Performance metrics, splits, and distribution charts of B2B Settlements</p>
+          </div>
+
+          {/* B2B KPI Metrics */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            {[
+              { label: 'Total Settled Today', value: formatKES(b2bKpis.totalSettledToday) },
+              { label: 'Total Settled Month', value: formatKES(b2bKpis.totalSettledMonth) },
+              { label: 'Settlement Success Rate', value: `${b2bKpis.successRate.toFixed(0)}%` },
+              { label: 'Settlement Failure Rate', value: `${b2bKpis.failureRate.toFixed(0)}%` }
+            ].map((k, i) => (
+              <div key={i} className="bg-panel border border-border-main rounded-xl p-5 shadow-sm flex flex-col justify-between h-24">
+                <span className="text-[10px] font-semibold text-muted-main uppercase tracking-wider block">
+                  {k.label}
+                </span>
+                <h3 className="text-xl md:text-2xl font-bold tracking-tight font-mono text-text-main mt-2">
+                  {k.value}
+                </h3>
+              </div>
+            ))}
+          </div>
+
+          {/* Settlement Charts */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Chart A: Settlements By Day (Area chart) */}
+            <div className="bg-panel border border-border-main rounded-xl p-5 shadow-sm flex flex-col justify-between lg:col-span-1">
+              <div className="mb-4">
+                <h3 className="font-bold text-sm flex items-center gap-1.5">
+                  <TrendingUp size={16} className="text-accent" />
+                  Settlements By Day
+                </h3>
+                <p className="text-xs text-muted-main">Outbound settlement values trend</p>
+              </div>
+              <div className="h-56 w-full text-xs">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={b2bCharts.settlementsByDay} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="colorSettlements" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#FF4500" stopOpacity={0.2}/>
+                        <stop offset="95%" stopColor="#FF4500" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border-main)" />
+                    <XAxis dataKey="date" stroke="var(--muted-main)" />
+                    <YAxis stroke="var(--muted-main)" />
+                    <Tooltip contentStyle={{ backgroundColor: 'var(--panel)', borderColor: 'var(--border-main)', color: 'var(--text-main)' }} />
+                    <Area type="monotone" dataKey="volume" stroke="#FF4500" fillOpacity={1} fill="url(#colorSettlements)" name="Settled" strokeWidth={2} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* Chart B: Settlements By Destination (Pie Chart) */}
+            <div className="bg-panel border border-border-main rounded-xl p-5 shadow-sm flex flex-col justify-between lg:col-span-1">
+              <div className="mb-2">
+                <h3 className="font-bold text-sm flex items-center gap-1.5">
+                  <PieIcon size={16} className="text-success-main" />
+                  Settlements By Destination
+                </h3>
+                <p className="text-xs text-muted-main">Outbound volume split by destination shortcode</p>
+              </div>
+              <div className="h-44 w-full flex items-center justify-center text-xs">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={b2bCharts.settlementsByDest}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={40}
+                      outerRadius={60}
+                      paddingAngle={4}
+                      dataKey="value"
+                      nameKey="name"
+                    >
+                      {b2bCharts.settlementsByDest.map((entry, index) => (
+                        <Cell key={`cell-b2b-${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip contentStyle={{ backgroundColor: 'var(--panel)', borderColor: 'var(--border-main)', color: 'var(--text-main)' }} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="grid grid-cols-3 gap-1 text-[9px] text-muted-main font-semibold border-t border-border-main pt-2.5">
+                {b2bCharts.settlementsByDest.map((entry, index) => (
+                  <div key={entry.name} className="flex items-center gap-1 truncate justify-center">
+                    <div className="w-2 h-2 rounded shrink-0" style={{ backgroundColor: COLORS[index % COLORS.length] }} />
+                    <span className="truncate">{entry.name}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Chart C: Settlements By Source (Bar Chart) */}
+            <div className="bg-panel border border-border-main rounded-xl p-5 shadow-sm flex flex-col justify-between lg:col-span-1">
+              <div className="mb-4">
+                <h3 className="font-bold text-sm flex items-center gap-1.5">
+                  <BarChart3 size={16} className="text-accent" />
+                  Settlements By Source Product
+                </h3>
+                <p className="text-xs text-muted-main">Split by product origin reference</p>
+              </div>
+              <div className="h-56 w-full text-xs">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={b2bCharts.settlementsBySource} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border-main)" />
+                    <XAxis dataKey="name" stroke="var(--muted-main)" />
+                    <YAxis stroke="var(--muted-main)" />
+                    <Tooltip contentStyle={{ backgroundColor: 'var(--panel)', borderColor: 'var(--border-main)', color: 'var(--text-main)' }} />
+                    <Bar dataKey="volume" fill="#0DB02B" radius={[2, 2, 0, 0]} name="Volume" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
           </div>
         </>
       )}
