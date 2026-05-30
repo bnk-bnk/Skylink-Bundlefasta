@@ -38,6 +38,15 @@
   --color-warning-main: var(--warning-main);
   --color-muted-main: var(--muted-main);
   --font-outfit: var(--font-outfit);
+
+  /* User-requested login page brand colors */
+  --color-brand-bg: var(--background);
+  --color-brand-panel: var(--panel);
+  --color-brand-text: var(--text-main);
+  --color-brand-border: var(--border-main);
+  --color-brand-accent: var(--accent);
+  --color-status-success: var(--success-main);
+  --color-status-danger: var(--danger);
 }
 
 body {

@@ -5,6 +5,14 @@ All notable changes to the Skylink Bundlefasta Dashboard project will be documen
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to Semantic Versioning.
 
+## [1.1.5] - 2026-05-30
+
+### Changed
+- Updated style classes on the calm login page [page.tsx](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/app/login/page.tsx) to match the brand color classes specified in the user's styling design.
+- Added brand and status color mappings (`brand-bg`, `brand-text`, `brand-accent`, `brand-panel`, `brand-border`, `status-danger`, `status-success`) to Tailwind CSS v4 `@theme` configuration in [globals.css](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/app/globals.css).
+
+---
+
 ## [1.1.4] - 2026-05-30
 
 ### Added
