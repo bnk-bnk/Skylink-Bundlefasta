@@ -12,10 +12,8 @@ export default function LoginPage() {
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [keyword, setKeyword] = useState('');
 
   const [showPassword, setShowPassword] = useState(false);
-  const [showKeyword, setShowKeyword] = useState(false);
 
   const [resetEmail, setResetEmail] = useState('');
   const [isResetSent, setIsResetSent] = useState(false);
@@ -30,12 +28,6 @@ export default function LoginPage() {
     setError('');
     setIsLoading(true);
     setSuccess(false);
-
-    if (keyword !== 'bnk' && email !== 'demo@skylink.com') {
-      setError('Invalid Admin Keyword. Please try again.');
-      setIsLoading(false);
-      return;
-    }
 
     try {
       const res = await loginAction({ email, authPin: password });
@@ -206,28 +198,7 @@ export default function LoginPage() {
                   </div>
                 </div>
 
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-brand-text/70 ml-1">Admin Keyword</label>
-                  <div className="relative">
-                    <Key className="absolute left-3 top-1/2 -translate-y-1/2 text-brand-text/40" size={18} />
-                    <input
-                      type={showKeyword ? 'text' : 'password'}
-                      required
-                      value={keyword}
-                      onChange={(e) => setKeyword(e.target.value)}
-                      className="w-full bg-brand-bg border border-brand-border rounded-xl py-2.5 pl-10 pr-10 focus:outline-none focus:ring-2 focus:ring-brand-accent focus:border-transparent transition-all sm:text-sm text-brand-text"
-                      placeholder="Enter keyword"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowKeyword(!showKeyword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-brand-text/40 hover:text-brand-text transition-colors cursor-pointer p-1"
-                      title={showKeyword ? "Hide keyword" : "Show keyword"}
-                    >
-                      {showKeyword ? <EyeOff size={16} /> : <Eye size={16} />}
-                    </button>
-                  </div>
-                </div>
+
 
                 <div className="flex items-center justify-end pt-1">
                   <button 
