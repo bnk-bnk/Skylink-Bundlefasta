@@ -42,7 +42,7 @@ export default function AuditView() {
 
   const filteredLogs = logs.filter(log => {
     const act = log.action.toLowerCase();
-    const email = log.me?.email?.toLowerCase() || 'system';
+    const email = log.metadata?.operator_email?.toLowerCase() || 'system';
     const query = search.toLowerCase();
     return act.includes(query) || email.includes(query);
   });
@@ -111,7 +111,7 @@ export default function AuditView() {
                             : 'text-accent bg-accent/10'
                         }`}>
                           {isSystem ? <Server size={10} /> : <User size={10} />}
-                          {isSystem ? 'SYSTEM CALLBACK' : (log.me?.email || 'Authenticated User')}
+                          {isSystem ? 'SYSTEM CALLBACK' : (log.metadata?.operator_email || 'Authenticated User')}
                         </span>
                       </td>
 

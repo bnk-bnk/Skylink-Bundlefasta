@@ -89,6 +89,26 @@ function normalizePesaPhone(input: string): string {
   return value;
 }
 
+function sanitizeCallbackUrl(url: string): string {
+  if (url.includes('localhost') || url.startsWith('http://localhost')) {
+    // Look for NEXT_PUBLIC_APP_URL. If it is NOT localhost, use it!
+    if (process.env.NEXT_PUBLIC_APP_URL && !process.env.NEXT_PUBLIC_APP_URL.includes('localhost')) {
+      const publicBase = process.env.NEXT_PUBLIC_APP_URL.replace(/\/$/, '');
+      return url.replace(/http:\/\/localhost:\d+/, publicBase);
+    }
+    
+    // Otherwise, check VERCEL_URL. If set, prepend https://
+    if (process.env.VERCEL_URL) {
+      const publicBase = `https://${process.env.VERCEL_URL}`.replace(/\/$/, '');
+      return url.replace(/http:\/\/localhost:\d+/, publicBase);
+    }
+    
+    // Default fallback
+    return url.replace(/http:\/\/localhost:\d+/, 'https://skylink-bundlefasta.vercel.app');
+  }
+  return url;
+}
+
 const getEnvConfig = (): DarajaConfig | null => {
   const consumerKey = process.env.DARAJA_CONSUMER_KEY;
   const consumerSecret = process.env.DARAJA_CONSUMER_SECRET;
@@ -114,13 +134,13 @@ const getEnvConfig = (): DarajaConfig | null => {
     certificate: cert,
     callbackUrlBase,
     isSandbox,
-    stkCallbackUrl: process.env.DARAJA_CALLBACK_URL || `${callbackUrlBase}/api/daraja/callback/stk`,
-    b2cResultUrl: process.env.DARAJA_B2C_RESULT_URL || `${callbackUrlBase}/api/daraja/callback/b2c`,
-    b2cTimeoutUrl: process.env.DARAJA_B2C_TIMEOUT_URL || `${callbackUrlBase}/api/daraja/callback/b2c-timeout`,
-    reversalResultUrl: process.env.DARAJA_REVERSAL_RESULT_URL || `${callbackUrlBase}/api/daraja/callback/reversal`,
-    reversalTimeoutUrl: process.env.DARAJA_REVERSAL_TIMEOUT_URL || `${callbackUrlBase}/api/daraja/callback/reversal-timeout`,
-    balanceResultUrl: process.env.DARAJA_BALANCE_RESULT_URL || `${callbackUrlBase}/api/daraja/callback/balance`,
-    balanceTimeoutUrl: process.env.DARAJA_BALANCE_TIMEOUT_URL || `${callbackUrlBase}/api/daraja/callback/balance-timeout`,
+    stkCallbackUrl: sanitizeCallbackUrl(process.env.DARAJA_CALLBACK_URL || `${callbackUrlBase}/api/daraja/callback/stk`),
+    b2cResultUrl: sanitizeCallbackUrl(process.env.DARAJA_B2C_RESULT_URL || `${callbackUrlBase}/api/daraja/callback/b2c`),
+    b2cTimeoutUrl: sanitizeCallbackUrl(process.env.DARAJA_B2C_TIMEOUT_URL || `${callbackUrlBase}/api/daraja/callback/b2c-timeout`),
+    reversalResultUrl: sanitizeCallbackUrl(process.env.DARAJA_REVERSAL_RESULT_URL || `${callbackUrlBase}/api/daraja/callback/reversal`),
+    reversalTimeoutUrl: sanitizeCallbackUrl(process.env.DARAJA_REVERSAL_TIMEOUT_URL || `${callbackUrlBase}/api/daraja/callback/reversal-timeout`),
+    balanceResultUrl: sanitizeCallbackUrl(process.env.DARAJA_BALANCE_RESULT_URL || `${callbackUrlBase}/api/daraja/callback/balance`),
+    balanceTimeoutUrl: sanitizeCallbackUrl(process.env.DARAJA_BALANCE_TIMEOUT_URL || `${callbackUrlBase}/api/daraja/callback/balance-timeout`),
   };
 };
 
@@ -345,7 +365,7 @@ export class DarajaService {
       Remarks: params.remarks,
       QueueTimeOutURL: config.b2cTimeoutUrl,
       ResultURL: config.b2cResultUrl,
-      Occassion: 'SkylinkPayout'
+      Occasion: 'SkylinkPayout'
     };
 
     const res = await fetch(`${baseUrl}/mpesa/b2c/v3/paymentrequest`, {
@@ -414,7 +434,7 @@ export class DarajaService {
       TransactionID: params.receiptNumber,
       Amount: params.amount,
       ReceiverParty: config.shortCode,
-      RecieverIdentifierType: '11', // 11 is for shortcode under reversals
+      ReceiverIdentifierType: '11', // 11 is for shortcode under reversals
       QueueTimeOutURL: config.reversalTimeoutUrl,
       ResultURL: config.reversalResultUrl,
       Remarks: params.reason,

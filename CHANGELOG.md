@@ -5,6 +5,19 @@ All notable changes to the Skylink Bundlefasta Dashboard project will be documen
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to Semantic Versioning.
 
+## [1.1.1] - 2026-05-30
+
+### Fixed
+- Fixed Daraja Account Balance query QueueTimeOutURL validation error by dynamically sanitizing callback URLs using `process.env.NEXT_PUBLIC_APP_URL` or `process.env.VERCEL_URL` when available.
+- Corrected parameter spelling in Daraja Reversal request from `RecieverIdentifierType` to `ReceiverIdentifierType` to prevent Safaricom integration payload validation failures.
+- Corrected B2C command parameter `Occassion` to `Occasion`.
+
+### Removed
+- Removed the developer "Simulate Payment" button and simulation modal UI completely from `Shell.tsx` to eliminate mock actions from the production site.
+
+### Changed
+- Updated the checklist tracking in `task.md`.
+
 ---
 
 ## [1.1.0] - 2026-05-30
@@ -15,12 +28,19 @@ and this project adheres to Semantic Versioning.
 - Created local environment configuration file [.env.local](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/.env.local) to store api keys.
 - Created M-Pesa Error translation dictionary in [darajaErrors.ts](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/lib/services/darajaErrors.ts) which maps ResponseCodes, B2C/Reversal/Balance callback ResultCodes, and general API codes to friendly explanations.
 - Added `DARAJA_ENV`, `DARAJA_CERTIFICATE` (RSA Public certificate), B2C command types and custom callback URL overrides to `.env.example` and `.env.local`.
+- Added tooltip explanations next to the operational form headers in [StkView.tsx](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/components/views/StkView.tsx), [B2cView.tsx](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/components/views/B2cView.tsx), [ReversalsView.tsx](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/components/views/ReversalsView.tsx), and [BalanceView.tsx](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/components/views/BalanceView.tsx).
 
 ### Changed
 - Integrated M-Pesa failure details in [B2cView.tsx](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/components/views/B2cView.tsx) to inspect raw callback payloads and display descriptive failure reasons instead of generic 'FAILED' labels.
 - Integrated M-Pesa failure details in [ReversalsView.tsx](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/components/views/ReversalsView.tsx) to inspect raw callback payloads and display descriptive failure reasons.
 - Refactored [daraja.ts](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/lib/services/daraja.ts) to encrypt B2C, Reversal, and Account Balance initiator passwords using Node's native `crypto.publicEncrypt` and Safaricom's public certificate.
 - Updated [daraja.ts](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/lib/services/daraja.ts) call sites to use a robust, regex-based `normalizePesaPhone` helper.
+- Added URL sanitization in [daraja.ts](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/lib/services/daraja.ts) to resolve localhost callback address errors.
+- Cleaned up PostgREST schema cache join errors by fetching `audit_logs` without relational tables in [actions.ts](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/app/actions.ts) and storing `operator_email` inside log metadata in [audit.ts](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/lib/repositories/audit.ts).
+- Refined STK push action in [actions.ts](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/app/actions.ts) and [StkView.tsx](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/components/views/StkView.tsx) to prompt and verify the Dashboard PIN before dispatching requests.
+- Replaced hardcoded Account Reference dropdown selections in [StkView.tsx](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/components/views/StkView.tsx) and the simulation panel in [Shell.tsx](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/components/layout/Shell.tsx) with custom text fields.
+- Replaced hardcoded mock balance data fallback values in [actions.ts](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/app/actions.ts) and [BalanceView.tsx](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/components/views/BalanceView.tsx) with a delayed DB snapshot lookup query to reflect actual Safaricom webhook callback values.
+- Cleaned up login input fields in [page.tsx](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/app/login/page.tsx) to read "Operator Password".
 
 ---
 

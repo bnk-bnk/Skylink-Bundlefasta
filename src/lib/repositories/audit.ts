@@ -13,7 +13,10 @@ export async function logAudit(action: string, metadata: any = {}) {
       .insert({
         auth_user_id: user?.id || null,
         action,
-        metadata,
+        metadata: {
+          ...metadata,
+          operator_email: user?.email || 'unknown',
+        },
       });
 
     if (error) {

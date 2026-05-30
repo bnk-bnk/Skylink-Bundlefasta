@@ -62,38 +62,36 @@ export async function hasPinAction() {
   return await hasPinConfigured(user.id);
 }
 
-// 5. Balance Refresh
 export async function refreshBalanceAction() {
   const user = await checkAuth();
   
   try {
     const res = await DarajaService.queryAccountBalance();
-    let balance = 0;
 
-    if (res.isMock) {
-      balance = res.balance;
-    } else {
-      // Parse Daraja payload for balance
-      // Usually returned in parameters (utility balance, working balance)
-      // For sandbox we mock it or extract it.
-      balance = Number(res.Balance) || 120500.00; 
+    if (res.ResponseCode && res.ResponseCode !== '0') {
+      throw new Error(res.ResponseDescription || 'M-Pesa balance query rejected.');
     }
 
-    const adminSupabase = createAdminClient();
-    const { data: snapshot, error } = await adminSupabase
+    if (res.isMock) {
+      await new Promise((resolve) => setTimeout(resolve, 2500));
+    } else {
+      await new Promise((resolve) => setTimeout(resolve, 4000));
+    }
+
+    const supabase = await createClient();
+    const { data: snapshot } = await supabase
       .from('balance_snapshots')
-      .insert({
-        balance,
-        fetched_at: new Date().toISOString(),
-      })
-      .select()
-      .single();
+      .select('balance, fetched_at')
+      .order('fetched_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
-    if (error) throw error;
-
-    await logAudit('BALANCE_REFRESHED', { balance, snapshotId: snapshot.id });
+    if (snapshot) {
+      await logAudit('BALANCE_REFRESHED', { balance: snapshot.balance, fetchedAt: snapshot.fetched_at });
+      return { success: true, balance: snapshot.balance, fetchedAt: snapshot.fetched_at };
+    }
     
-    return { success: true, balance, fetchedAt: snapshot.fetched_at };
+    return { success: true, pending: true, message: 'Request sent. Callback processing...' };
   } catch (error: any) {
     console.error('Balance query action failed:', error);
     return { success: false, error: error.message };
@@ -106,12 +104,21 @@ export async function initiateStkPushAction(params: {
   amount: number;
   reference: string;
   description: string;
+  pin: string;
 }) {
   const user = await checkAuth();
+
+  // 1. Confirm PIN first
+  const isPinValid = await verifyDashboardPin(user.id, params.pin);
+  if (!isPinValid) {
+    await logAudit('STK_PUSH_BLOCKED_BAD_PIN', { phone: params.phone, amount: params.amount });
+    return { success: false, error: 'Incorrect Dashboard PIN' };
+  }
+
   const adminSupabase = createAdminClient();
 
   try {
-    // 1. Call Daraja
+    // 2. Call Daraja
     const res = await DarajaService.initiateStkPush({
       phoneNumber: params.phone,
       amount: params.amount,
@@ -119,7 +126,7 @@ export async function initiateStkPushAction(params: {
       description: params.description,
     });
 
-    // 2. Insert stk_requests
+    // 3. Insert stk_requests
     const { data, error } = await adminSupabase
       .from('stk_requests')
       .insert({
@@ -278,12 +285,7 @@ export async function getAuditLogsAction(limitVal: number = 50) {
 
   const { data, error } = await supabase
     .from('audit_logs')
-    .select(`
-      *,
-      me:auth_user_id (
-        email
-      )
-    `)
+    .select('*')
     .order('created_at', { ascending: false })
     .limit(limitVal);
 

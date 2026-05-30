@@ -97,7 +97,7 @@ export default function LoginPage() {
 
           <div>
             <label className="block text-xs font-semibold text-muted-main uppercase tracking-wider mb-1">
-              M-Pesa PIN / Password
+              Operator Password
             </label>
             <div className="relative">
               <Lock size={16} className="absolute left-3 top-3 text-muted-main" />
@@ -107,7 +107,7 @@ export default function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full text-sm pl-9 pr-3 py-2.5 border border-border-main rounded-lg bg-background text-text-main focus:outline-none focus:border-accent"
-                placeholder="••••••••"
+                placeholder="Enter password"
               />
             </div>
           </div>

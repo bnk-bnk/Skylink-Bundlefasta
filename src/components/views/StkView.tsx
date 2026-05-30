@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { Send, Search, HelpCircle, ArrowUpRight, CheckCircle2, Clock, AlertCircle } from 'lucide-react';
 import { initiateStkPushAction, queryStkStatusAction } from '@/app/actions';
 import { createClient } from '@/lib/supabase/client';
+import PinConfirmModal from '../shared/PinConfirmModal';
 
 export default function StkView() {
   const [phone, setPhone] = useState('254708374149');
@@ -16,6 +17,7 @@ export default function StkView() {
   
   const [activeRequests, setActiveRequests] = useState<any[]>([]);
   const [pollingStatus, setPollingStatus] = useState<{ [id: string]: string }>({});
+  const [isPinModalOpen, setIsPinModalOpen] = useState(false);
   
   const supabase = createClient();
 
@@ -48,8 +50,12 @@ export default function StkView() {
     };
   }, [supabase]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleStkSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setIsPinModalOpen(true);
+  };
+
+  const handleConfirmPin = async (pin: string) => {
     setLoading(true);
     setSuccessMsg(null);
     setErrorMsg(null);
@@ -60,6 +66,7 @@ export default function StkView() {
         amount: Number(amount),
         reference,
         description,
+        pin,
       });
 
       if (res.success && res.data) {
@@ -94,9 +101,17 @@ export default function StkView() {
       
       {/* 1. Form Column */}
       <div className="bg-panel border border-border-main rounded-xl p-5 shadow-sm lg:col-span-1 h-fit">
-        <h3 className="font-bold text-sm mb-4">Request STK Push</h3>
+        <div className="flex items-center gap-2 mb-2">
+          <span title="Triggers an M-Pesa STK Push payment prompt directly to the customer's phone to input their PIN.">
+            <HelpCircle size={16} className="text-accent cursor-help shrink-0" />
+          </span>
+          <h3 className="font-bold text-sm">Request STK Push</h3>
+        </div>
+        <p className="text-[10px] text-muted-main mb-4">
+          Lipa Na M-Pesa online checkout triggers prompt on phone.
+        </p>
         
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleStkSubmit} className="space-y-4">
           <div>
             <label className="block text-xs font-semibold text-muted-main uppercase tracking-wider mb-1">
               Customer Phone Number
@@ -130,17 +145,14 @@ export default function StkView() {
             <label className="block text-xs font-semibold text-muted-main uppercase tracking-wider mb-1">
               Account Reference
             </label>
-            <select
+            <input
+              type="text"
+              required
               value={reference}
-              onChange={(e) => setReference(e.target.value)}
-              className="w-full text-xs py-2 px-3 border border-border-main rounded-lg bg-background"
-            >
-              <option value="PESATRIX">PESATRIX</option>
-              <option value="BINGWAZONE">BINGWAZONE</option>
-              <option value="POSTER">POSTER</option>
-              <option value="MINISITE">MINISITE</option>
-              <option value="UNKNOWN">CUSTOM / OTHER</option>
-            </select>
+              onChange={(e) => setReference(e.target.value.toUpperCase().trim())}
+              className="w-full text-xs py-2 px-3 border border-border-main rounded-lg bg-background font-mono font-bold"
+              placeholder="e.g. PESATRIX, BINGWAZONE, CUSTOM"
+            />
           </div>
 
           <div>
@@ -254,6 +266,15 @@ export default function StkView() {
           </table>
         </div>
       </div>
+
+      {/* Security PIN Authorization Modal */}
+      <PinConfirmModal
+        isOpen={isPinModalOpen}
+        onClose={() => setIsPinModalOpen(false)}
+        onConfirm={handleConfirmPin}
+        title="Authorize STK Push Payment"
+        description={`Please enter your dashboard PIN to authorize Lipa Na M-Pesa STK prompt of KES ${Number(amount).toFixed(2)} to ${phone}.`}
+      />
 
     </div>
   );

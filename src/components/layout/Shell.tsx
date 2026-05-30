@@ -17,9 +17,7 @@ import {
   ChevronLeft,
   ChevronRight,
   User,
-  Zap,
   Menu,
-  X,
   CreditCard,
   Plus
 } from 'lucide-react';
@@ -35,12 +33,6 @@ export default function Shell({ activeTab, setActiveTab, children }: ShellProps)
   const [collapsed, setCollapsed] = useState(false);
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const [userEmail, setUserEmail] = useState<string | null>(null);
-  const [showSimModal, setShowSimModal] = useState(false);
-  const [simAmount, setSimAmount] = useState('5000');
-  const [simPhone, setSimPhone] = useState('254708374149');
-  const [simRef, setSimRef] = useState('PESATRIX');
-  const [simulating, setSimulating] = useState(false);
-  const [simSuccess, setSimSuccess] = useState<string | null>(null);
   
   const router = useRouter();
   const supabase = createClient();
@@ -79,41 +71,7 @@ export default function Shell({ activeTab, setActiveTab, children }: ShellProps)
     router.refresh();
   };
 
-  // Run the C2B mock simulation call
-  const triggerSimulation = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSimulating(true);
-    setSimSuccess(null);
-    try {
-      const res = await fetch('/api/mock/c2b', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          phone: simPhone,
-          amount: Number(simAmount),
-          reference: simRef,
-        }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        setSimSuccess(`Mock payment processed! Receipt: ${data.mpesaReceipt}`);
-        setTimeout(() => {
-          setShowSimModal(false);
-          setSimSuccess(null);
-          // Refresh the page data if we have listener or trigger re-render
-          window.location.reload();
-        }, 1500);
-      } else {
-        alert(`Simulation error: ${data.error}`);
-      }
-    } catch (err: any) {
-      alert(`Simulation request failed: ${err.message}`);
-    } finally {
-      setSimulating(false);
-    }
-  };
+
 
   // Nav Items configuration for laptop sidebar
   const menuItems = [
@@ -191,17 +149,8 @@ export default function Shell({ activeTab, setActiveTab, children }: ShellProps)
           })}
         </nav>
 
-        {/* Bottom Profile / Quick Simulator Action */}
+        {/* Bottom Profile */}
         <div className="p-4 border-t border-border-main space-y-2 shrink-0">
-          {!collapsed && (
-            <button
-              onClick={() => setShowSimModal(true)}
-              className="w-full flex items-center justify-center gap-2 py-2 px-3 bg-accent text-white font-medium text-xs rounded-lg hover:opacity-90 shadow-sm transition-all active:scale-95"
-            >
-              <Zap size={14} />
-              Simulate Payment
-            </button>
-          )}
 
           <div className="flex items-center gap-3 py-2 px-2 hover:bg-background rounded-lg transition-colors overflow-hidden">
             <div className="w-8 h-8 rounded-full bg-border-main flex items-center justify-center shrink-0">
@@ -237,14 +186,7 @@ export default function Shell({ activeTab, setActiveTab, children }: ShellProps)
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Quick Simulate Trigger on Mobile Header */}
-            <button
-              onClick={() => setShowSimModal(true)}
-              className="md:hidden flex items-center justify-center w-8 h-8 bg-accent text-white rounded-lg hover:opacity-90 transition-opacity"
-              title="Simulate Incoming Payment"
-            >
-              <Zap size={16} />
-            </button>
+
 
             {/* Light/Dark Toggle */}
             <button
@@ -316,96 +258,7 @@ export default function Shell({ activeTab, setActiveTab, children }: ShellProps)
         </nav>
       </div>
 
-      {/* 5. DEV SIMULATION MODAL */}
-      <AnimatePresence>
-        {showSimModal && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 animate-fade-in backdrop-blur-sm">
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-panel border border-border-main rounded-xl p-6 w-full max-w-md shadow-xl relative"
-            >
-              <button
-                onClick={() => setShowSimModal(false)}
-                className="absolute top-4 right-4 text-muted-main hover:text-text-main p-1 hover:bg-background border border-border-main rounded-md"
-              >
-                <X size={16} />
-              </button>
 
-              <h3 className="font-bold text-lg mb-2 flex items-center gap-2 text-accent">
-                <Zap size={20} />
-                Simulate M-Pesa Inflow (C2B)
-              </h3>
-              <p className="text-xs text-muted-main mb-4 leading-relaxed">
-                This triggers a simulated Safaricom C2B payment callback to the local `/api/daraja/callback/c2b` webhook. Use it to instantly test ledger indexing, RLS, and source mapping.
-              </p>
-
-              <form onSubmit={triggerSimulation} className="space-y-4">
-                <div>
-                  <label className="block text-xs font-semibold mb-1 text-muted-main uppercase tracking-wider">
-                    Customer Phone Number
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={simPhone}
-                    onChange={(e) => setSimPhone(e.target.value)}
-                    className="w-full text-sm py-2 px-3 border border-border-main rounded-lg bg-background focus:outline-none focus:border-accent"
-                    placeholder="2547XXXXXXXX"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold mb-1 text-muted-main uppercase tracking-wider">
-                    Transaction Amount (KES)
-                  </label>
-                  <input
-                    type="number"
-                    required
-                    value={simAmount}
-                    onChange={(e) => setSimAmount(e.target.value)}
-                    className="w-full text-sm py-2 px-3 border border-border-main rounded-lg bg-background focus:outline-none focus:border-accent"
-                    placeholder="5000"
-                    min="1"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold mb-1 text-muted-main uppercase tracking-wider">
-                    Account Reference (BillRef)
-                  </label>
-                  <select
-                    value={simRef}
-                    onChange={(e) => setSimRef(e.target.value)}
-                    className="w-full text-sm py-2 px-3 border border-border-main rounded-lg bg-background focus:outline-none focus:border-accent"
-                  >
-                    <option value="PESATRIX">PESATRIX (Mapped)</option>
-                    <option value="BINGWAZONE">BINGWAZONE (Mapped)</option>
-                    <option value="POSTER">POSTER (Mapped)</option>
-                    <option value="MINISITE">MINISITE (Mapped)</option>
-                    <option value="RANDOM_REF">RANDOM_REF (Unknown Reference)</option>
-                  </select>
-                </div>
-
-                {simSuccess && (
-                  <p className="text-xs text-success-main font-semibold bg-success-main/10 p-2 rounded-lg text-center">
-                    {simSuccess}
-                  </p>
-                )}
-
-                <button
-                  type="submit"
-                  disabled={simulating}
-                  className="w-full py-2.5 bg-accent hover:opacity-90 disabled:opacity-50 text-white font-semibold text-sm rounded-lg shadow-sm active:scale-[0.98] transition-all"
-                >
-                  {simulating ? 'Processing...' : 'Send Simulated Webhook'}
-                </button>
-              </form>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
 
     </div>
   );

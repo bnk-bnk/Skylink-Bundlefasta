@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { RotateCcw, AlertTriangle, ShieldCheck, CheckCircle2, AlertCircle } from 'lucide-react';
+import { RotateCcw, AlertTriangle, ShieldCheck, CheckCircle2, AlertCircle, HelpCircle } from 'lucide-react';
 import { requestReversalAction } from '@/app/actions';
 import { createClient } from '@/lib/supabase/client';
 import PinConfirmModal from '../shared/PinConfirmModal';
@@ -90,6 +90,9 @@ export default function ReversalsView() {
         <div className="flex items-center gap-2 mb-2">
           <ShieldCheck size={18} className="text-warning-main shrink-0" />
           <h3 className="font-bold text-sm">Request Transaction Reversal</h3>
+          <span title="Sends a request to Safaricom to reverse a specific incoming C2B or STK transaction back to the customer's wallet.">
+            <HelpCircle size={14} className="text-muted-main cursor-help shrink-0" />
+          </span>
         </div>
         <p className="text-[10px] text-muted-main mb-4">
           Strictly requires dashboard security PIN verification.

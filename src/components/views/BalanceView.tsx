@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { RefreshCw, Wallet, Clock, TrendingUp, AlertTriangle } from 'lucide-react';
+import { RefreshCw, Wallet, Clock, TrendingUp, AlertTriangle, HelpCircle } from 'lucide-react';
 import { getDashboardStatsAction, refreshBalanceAction, getAnalyticsAction } from '@/app/actions';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 
@@ -35,11 +35,15 @@ export default function BalanceView() {
     try {
       const res = await refreshBalanceAction();
       if (res.success) {
-        setBalance(res.balance || 0);
-        setLastRefreshed(res.fetchedAt || null);
-        // Refresh chart history
-        const anal = await getAnalyticsAction();
-        setHistory(anal.charts.balanceTrend || []);
+        if (res.pending) {
+          setError('Balance request sent successfully. Safaricom callback is processing in the background. Please wait a moment and refresh this page.');
+        } else {
+          setBalance(res.balance || 0);
+          setLastRefreshed(res.fetchedAt || null);
+          // Refresh chart history
+          const anal = await getAnalyticsAction();
+          setHistory(anal.charts.balanceTrend || []);
+        }
       } else {
         setError(res.error || 'Failed to communicate with M-Pesa endpoints.');
       }
@@ -63,7 +67,12 @@ export default function BalanceView() {
         <div className="bg-panel border border-border-main rounded-xl p-6 shadow-sm flex flex-col justify-between md:col-span-1">
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-muted-main uppercase tracking-wider">Account Balance</span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-semibold text-muted-main uppercase tracking-wider">Account Balance</span>
+                <span title="Fetches live balances for Working, Utility, and Charges Paid accounts from M-Pesa.">
+                  <HelpCircle size={14} className="text-muted-main cursor-help" />
+                </span>
+              </div>
               <div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center text-accent">
                 <Wallet size={20} />
               </div>

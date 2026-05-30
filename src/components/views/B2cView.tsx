@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Send, AlertTriangle, ShieldCheck, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Send, AlertTriangle, ShieldCheck, CheckCircle2, AlertCircle, HelpCircle } from 'lucide-react';
 import { sendB2cAction } from '@/app/actions';
 import { createClient } from '@/lib/supabase/client';
 import PinConfirmModal from '../shared/PinConfirmModal';
@@ -88,6 +88,9 @@ export default function B2cView() {
         <div className="flex items-center gap-2 mb-2">
           <ShieldCheck size={18} className="text-warning-main shrink-0" />
           <h3 className="font-bold text-sm">Send B2C Payout</h3>
+          <span title="Disburses funds directly from the company's Utility/Working account to the customer's mobile wallet.">
+            <HelpCircle size={14} className="text-muted-main cursor-help shrink-0" />
+          </span>
         </div>
         <p className="text-[10px] text-muted-main mb-4">
           Requires dashboard security PIN authorization.
