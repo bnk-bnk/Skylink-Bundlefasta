@@ -1,0 +1,248 @@
+import { createClient, createAdminClient } from '../supabase/server';
+import { Transaction, TransactionDirection, TransactionType, TransactionStatus } from '@/types/database';
+
+// Resolve the product source ID by its account reference string
+export async function resolveSourceId(referenceText: string | null): Promise<string | null> {
+  if (!referenceText) return null;
+  
+  const supabase = await createClient();
+  const cleanRef = referenceText.trim().toUpperCase();
+
+  // Search product_sources (case-insensitive checking is safer)
+  const { data, error } = await supabase
+    .from('product_sources')
+    .select('id')
+    .eq('reference', cleanRef)
+    .eq('active', true)
+    .maybeSingle();
+
+  if (error || !data) {
+    // If not found in exact reference, try searching with ILIKE or return null
+    const { data: ilikeData } = await supabase
+      .from('product_sources')
+      .select('id')
+      .ilike('reference', cleanRef)
+      .eq('active', true)
+      .maybeSingle();
+
+    return ilikeData?.id || null;
+  }
+
+  return data.id;
+}
+
+export interface TransactionFilters {
+  direction?: TransactionDirection;
+  transactionType?: TransactionType;
+  sourceId?: string;
+  phoneNumber?: string;
+  accountReference?: string;
+  status?: TransactionStatus;
+  dateStart?: string;
+  dateEnd?: string;
+  limit?: number;
+  offset?: number;
+}
+
+// Fetch all transactions with filters
+export async function getTransactions(filters: TransactionFilters = {}) {
+  const supabase = await createClient();
+  
+  let query = supabase
+    .from('transactions')
+    .select(`
+      *,
+      product_sources (
+        id,
+        name,
+        reference
+      )
+    `)
+    .order('created_at', { ascending: false });
+
+  if (filters.direction) {
+    query = query.eq('direction', filters.direction);
+  }
+  if (filters.transactionType) {
+    query = query.eq('transaction_type', filters.transactionType);
+  }
+  if (filters.sourceId) {
+    query = query.eq('source_id', filters.sourceId);
+  }
+  if (filters.status) {
+    query = query.eq('status', filters.status);
+  }
+  if (filters.phoneNumber) {
+    query = query.ilike('phone_number', `%${filters.phoneNumber}%`);
+  }
+  if (filters.accountReference) {
+    query = query.ilike('account_reference', `%${filters.accountReference}%`);
+  }
+  if (filters.dateStart) {
+    query = query.gte('created_at', filters.dateStart);
+  }
+  if (filters.dateEnd) {
+    query = query.lte('created_at', filters.dateEnd);
+  }
+  
+  const limit = filters.limit || 50;
+  const offset = filters.offset || 0;
+  query = query.range(offset, offset + limit - 1);
+
+  const { data, error, count } = await query;
+
+  if (error) {
+    console.error('Failed to get transactions:', error);
+    return { data: [], count: 0 };
+  }
+
+  return { data: data || [], count: count || 0 };
+}
+
+// Write new transaction and auto-resolve source ID
+export async function createTransaction(tx: {
+  direction: TransactionDirection;
+  transaction_type: TransactionType;
+  account_reference?: string | null;
+  phone_number?: string | null;
+  amount: number;
+  mpesa_receipt?: string | null;
+  merchant_request_id?: string | null;
+  checkout_request_id?: string | null;
+  status?: TransactionStatus;
+  description?: string | null;
+  raw_payload?: any;
+}) {
+  const adminSupabase = createAdminClient(); // Webhooks/API endpoints use admin permission to securely write
+  
+  let sourceId: string | null = null;
+  if (tx.account_reference) {
+    sourceId = await resolveSourceId(tx.account_reference);
+  }
+
+  const { data, error } = await adminSupabase
+    .from('transactions')
+    .insert({
+      direction: tx.direction,
+      transaction_type: tx.transaction_type,
+      source_id: sourceId,
+      account_reference: tx.account_reference || null,
+      phone_number: tx.phone_number || null,
+      amount: tx.amount,
+      mpesa_receipt: tx.mpesa_receipt || null,
+      merchant_request_id: tx.merchant_request_id || null,
+      checkout_request_id: tx.checkout_request_id || null,
+      status: tx.status || 'PENDING',
+      description: tx.description || null,
+      raw_payload: tx.raw_payload || null,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Failed to insert transaction:', error);
+    throw error;
+  }
+
+  return data;
+}
+
+// Update transaction status (for callbacks/status queries)
+export async function updateTransactionStatus(
+  receiptOrId: { mpesa_receipt?: string; checkout_request_id?: string; id?: string },
+  status: TransactionStatus,
+  description?: string,
+  rawPayload?: any
+) {
+  const adminSupabase = createAdminClient();
+  let query = adminSupabase.from('transactions').update({
+    status,
+    description,
+    raw_payload: rawPayload,
+    updated_at: new Date().toISOString(),
+  });
+
+  if (receiptOrId.id) {
+    query = query.eq('id', receiptOrId.id);
+  } else if (receiptOrId.mpesa_receipt) {
+    query = query.eq('mpesa_receipt', receiptOrId.mpesa_receipt);
+  } else if (receiptOrId.checkout_request_id) {
+    query = query.eq('checkout_request_id', receiptOrId.checkout_request_id);
+  } else {
+    throw new Error('Must provide either id, mpesa_receipt, or checkout_request_id');
+  }
+
+  const { data, error } = await query.select();
+  if (error) {
+    console.error('Failed to update transaction status:', error);
+    throw error;
+  }
+  return data;
+}
+
+// Fetch stats for the dashboard summary cards
+export async function getDashboardStats() {
+  const supabase = await createClient();
+  
+  // Get latest balance snapshot
+  const { data: balanceData } = await supabase
+    .from('balance_snapshots')
+    .select('balance, fetched_at')
+    .order('fetched_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const balance = balanceData?.balance || 0;
+  const lastRefresh = balanceData?.fetched_at || null;
+
+  // Calculate boundaries for "Today" in UTC+3 (or user's timezone, let's use current calendar date)
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const todayISO = today.toISOString();
+
+  // Sum Incoming Today (direction = 'IN', status = 'SUCCESS', created_at >= today)
+  const { data: incomingData, error: incError } = await supabase
+    .from('transactions')
+    .select('amount')
+    .eq('direction', 'IN')
+    .eq('status', 'SUCCESS')
+    .gte('created_at', todayISO);
+
+  const incomingToday = (incomingData || []).reduce((sum: number, tx: any) => sum + Number(tx.amount), 0);
+
+  // Sum Outgoing Today (direction = 'OUT', status = 'SUCCESS', created_at >= today)
+  const { data: outgoingData } = await supabase
+    .from('transactions')
+    .select('amount')
+    .eq('direction', 'OUT')
+    .eq('status', 'SUCCESS')
+    .gte('created_at', todayISO);
+
+  const outgoingToday = (outgoingData || []).reduce((sum: number, tx: any) => sum + Number(tx.amount), 0);
+
+  const netFlow = incomingToday - outgoingToday;
+
+  // STKs today
+  const { count: stksCount } = await supabase
+    .from('transactions')
+    .select('*', { count: 'exact', head: true })
+    .eq('transaction_type', 'STK')
+    .gte('created_at', todayISO);
+
+  // Reversals today
+  const { count: reversalsCount } = await supabase
+    .from('transactions')
+    .select('*', { count: 'exact', head: true })
+    .eq('transaction_type', 'REVERSAL')
+    .gte('created_at', todayISO);
+
+  return {
+    balance,
+    lastRefresh,
+    incomingToday,
+    outgoingToday,
+    netFlow,
+    stksToday: stksCount || 0,
+    reversalsToday: reversalsCount || 0,
+  };
+}

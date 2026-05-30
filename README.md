@@ -1,45 +1,36 @@
-# Skylink Bundlefasta - Fintech Operations Dashboard
+This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
-Skylink Bundlefasta is a premium, retro-themed operations dashboard designed for managing M-Pesa Daraja API transactions, STK pushes, reconciliation, and reversals.
+## Getting Started
 
-## 🛠️ Tech Stack
-- **Frontend**: React 19, Vite, TypeScript, Tailwind CSS v4, Motion (animations), Recharts, Lucide React
-- **Backend (Planned)**: Express backend for secure API proxying and webhook handlers
-- **Database**: Supabase PostgreSQL with Row Level Security (RLS)
+First, run the development server:
 
-## 📦 Project Structure
-- `src/components/`: Core UI widgets, sidebar, headers, charts, and context providers.
-- `src/pages/`: Modular page views (Dashboard, Transactions, STK Push, Reversals, Reconciliation, Customers, Analytics, Settings).
-- `src/utils/`: (To be added) Supabase clients and helper functions.
+```bash
+npm run dev
+# or
+yarn dev
+# or
+pnpm dev
+# or
+bun dev
+```
 
-## 🔐 Security & Credentials
-The application is designed for **single admin access** with multi-factor verification:
-- Email and Password authenticated via Supabase Auth
-- Secret login Keyword verified via database RPC function
-- API credentials (M-Pesa Consumer Key, Secret, Passkey) are stored securely and must never be exposed to the client.
+Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-## 🚀 Running Locally
+You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
-### Prerequisites
-- [Node.js](https://nodejs.org/) (v18 or higher recommended)
-- A [Supabase](https://supabase.com) project database
+This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
-### Installation
-1. Clone the repository and install dependencies:
-   ```bash
-   npm install
-   ```
-2. Copy the environment template:
-   ```bash
-   cp .env.example .env
-   ```
-3. Set your variables in `.env` (refer to [ENVIRONMENT_VARIABLES.md](ENVIRONMENT_VARIABLES.md) for details):
-   ```env
-   VITE_SUPABASE_URL="your-supabase-url"
-   VITE_SUPABASE_ANON_KEY="your-supabase-anon-key"
-   ```
-4. Run the development server:
-   ```bash
-   npm run dev
-   ```
-   The app will run locally at [http://localhost:3000](http://localhost:3000).
+## Learn More
+
+To learn more about Next.js, take a look at the following resources:
+
+- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
+- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+
+You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+
+## Deploy on Vercel
+
+The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+
+Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.

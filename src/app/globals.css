@@ -1,0 +1,51 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap');
+@import "tailwindcss";
+
+:root {
+  --background: #F4F7FA;
+  --panel: #FFFFFF;
+  --text-main: #111827;
+  --border-main: #E5E7EB;
+  --accent: #00BFFF;
+  --success-main: #0DB02B;
+  --danger: #E60000;
+  --warning-main: #FF4500;
+  --muted-main: #6B7280;
+  --font-outfit: 'Outfit', sans-serif;
+}
+
+/* Support dark mode class */
+.dark {
+  --background: #0B0F19;
+  --panel: #162032;
+  --text-main: #F9FAFB;
+  --border-main: #243048;
+  --accent: #00BFFF;
+  --success-main: #10B981;
+  --danger: #FF3B30;
+  --warning-main: #FF9500;
+  --muted-main: #9CA3AF;
+}
+
+@theme {
+  --color-background: var(--background);
+  --color-panel: var(--panel);
+  --color-text-main: var(--text-main);
+  --color-border-main: var(--border-main);
+  --color-accent: var(--accent);
+  --color-success-main: var(--success-main);
+  --color-danger: var(--danger);
+  --color-warning-main: var(--warning-main);
+  --color-muted-main: var(--muted-main);
+  --font-outfit: var(--font-outfit);
+}
+
+body {
+  background-color: var(--background);
+  color: var(--text-main);
+  font-family: var(--font-outfit), sans-serif;
+  margin: 0;
+  padding: 0;
+  transition: background-color 0.2s ease, color 0.2s ease;
+  min-height: 100vh;
+}
