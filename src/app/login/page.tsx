@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Lock, Mail, Key, ArrowLeft, CheckCircle2, Zap } from 'lucide-react';
+import { Lock, Mail, Key, ArrowLeft, CheckCircle2, Zap, Eye, EyeOff } from 'lucide-react';
 import { loginAction, demoLoginAction, resetPasswordAction } from './actions';
 
 export default function LoginPage() {
@@ -13,6 +13,9 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [keyword, setKeyword] = useState('');
+
+  const [showPassword, setShowPassword] = useState(false);
+  const [showKeyword, setShowKeyword] = useState(false);
 
   const [resetEmail, setResetEmail] = useState('');
   const [isResetSent, setIsResetSent] = useState(false);
@@ -132,15 +135,15 @@ export default function LoginPage() {
           </p>
         </div>
 
-        <div className="p-8 rounded-3xl bg-brand-panel/50 backdrop-blur-xl border border-brand-border shadow-xl overflow-hidden relative">
+        <div className="p-6 sm:p-8 rounded-2xl sm:rounded-3xl bg-brand-panel/50 backdrop-blur-xl border border-brand-border shadow-xl overflow-hidden relative">
           <AnimatePresence mode="wait">
             {view === 'login' ? (
               <motion.form 
                 key="login-form"
-                initial={{ opacity: 0, x: -20 }}
+                initial={{ opacity: 0, x: -30 }}
                 animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -20 }}
-                transition={{ duration: 0.2 }}
+                exit={{ opacity: 0, x: 30 }}
+                transition={{ duration: 0.25, ease: 'easeInOut' }}
                 onSubmit={handleLoginSubmit} 
                 className="space-y-5"
               >
@@ -185,13 +188,21 @@ export default function LoginPage() {
                   <div className="relative">
                     <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-brand-text/40" size={18} />
                     <input
-                      type="password"
+                      type={showPassword ? 'text' : 'password'}
                       required
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className="w-full bg-brand-bg border border-brand-border rounded-xl py-2.5 pl-10 pr-4 focus:outline-none focus:ring-2 focus:ring-brand-accent focus:border-transparent transition-all sm:text-sm text-brand-text"
+                      className="w-full bg-brand-bg border border-brand-border rounded-xl py-2.5 pl-10 pr-10 focus:outline-none focus:ring-2 focus:ring-brand-accent focus:border-transparent transition-all sm:text-sm text-brand-text"
                       placeholder="Enter your password"
                     />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-brand-text/40 hover:text-brand-text transition-colors cursor-pointer p-1"
+                      title={showPassword ? "Hide password" : "Show password"}
+                    >
+                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
                   </div>
                 </div>
 
@@ -200,13 +211,21 @@ export default function LoginPage() {
                   <div className="relative">
                     <Key className="absolute left-3 top-1/2 -translate-y-1/2 text-brand-text/40" size={18} />
                     <input
-                      type="password"
+                      type={showKeyword ? 'text' : 'password'}
                       required
                       value={keyword}
                       onChange={(e) => setKeyword(e.target.value)}
-                      className="w-full bg-brand-bg border border-brand-border rounded-xl py-2.5 pl-10 pr-4 focus:outline-none focus:ring-2 focus:ring-brand-accent focus:border-transparent transition-all sm:text-sm text-brand-text"
+                      className="w-full bg-brand-bg border border-brand-border rounded-xl py-2.5 pl-10 pr-10 focus:outline-none focus:ring-2 focus:ring-brand-accent focus:border-transparent transition-all sm:text-sm text-brand-text"
                       placeholder="Enter keyword"
                     />
+                    <button
+                      type="button"
+                      onClick={() => setShowKeyword(!showKeyword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-brand-text/40 hover:text-brand-text transition-colors cursor-pointer p-1"
+                      title={showKeyword ? "Hide keyword" : "Show keyword"}
+                    >
+                      {showKeyword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
                   </div>
                 </div>
 
@@ -258,10 +277,10 @@ export default function LoginPage() {
             ) : (
               <motion.form 
                 key="forgot-form"
-                initial={{ opacity: 0, x: 20 }}
+                initial={{ opacity: 0, x: 30 }}
                 animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 20 }}
-                transition={{ duration: 0.2 }}
+                exit={{ opacity: 0, x: -30 }}
+                transition={{ duration: 0.25, ease: 'easeInOut' }}
                 onSubmit={handleResetSubmit} 
                 className="space-y-5"
               >

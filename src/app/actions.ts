@@ -368,3 +368,67 @@ export async function simulateC2bAction(params: {
     return { success: false, error: error.message };
   }
 }
+
+// 13. Fetch all transactions for Analytics within a range (no pagination limits)
+export async function getAnalyticsTransactionsAction(filters: { dateStart?: string; dateEnd?: string }) {
+  await checkAuth();
+  const supabase = await createClient();
+  let query = supabase
+    .from('transactions')
+    .select(`
+      *,
+      product_sources (
+        id,
+        name,
+        reference
+      )
+    `)
+    .order('created_at', { ascending: true });
+
+  if (filters.dateStart) {
+    query = query.gte('created_at', filters.dateStart);
+  }
+  if (filters.dateEnd) {
+    query = query.lte('created_at', filters.dateEnd);
+  }
+
+  const { data, error } = await query;
+  if (error) {
+    console.error('Failed to fetch analytics transactions:', error);
+    return [];
+  }
+  return data || [];
+}
+
+// 14. Bulk Delete Transactions
+export async function deleteTransactionsAction(ids: string[]) {
+  await checkAuth();
+  const adminSupabase = createAdminClient();
+  const { error } = await adminSupabase
+    .from('transactions')
+    .delete()
+    .in('id', ids);
+
+  if (error) {
+    console.error('Failed to bulk delete transactions:', error);
+    return { success: false, error: error.message };
+  }
+
+  await logAudit('BULK_TRANSACTIONS_DELETED', { count: ids.length, ids });
+  return { success: true };
+}
+
+// 15. Update Password
+export async function updatePasswordAction(password: string) {
+  await checkAuth();
+  const supabase = await createClient();
+  const { error } = await supabase.auth.updateUser({ password });
+
+  if (error) {
+    console.error('Failed to change password:', error);
+    return { success: false, error: error.message };
+  }
+
+  await logAudit('PASSWORD_CHANGED');
+  return { success: true };
+}

@@ -19,7 +19,8 @@ import {
   User,
   Menu,
   CreditCard,
-  Plus
+  Plus,
+  Settings
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 
@@ -53,7 +54,38 @@ export default function Shell({ activeTab, setActiveTab, children }: ShellProps)
         setUserEmail(user.email || 'User');
       }
     });
-  }, [supabase]);
+
+    // Inactivity Auto-logout after 30 minutes
+    let timeoutId: NodeJS.Timeout;
+
+    const resetInactivityTimer = () => {
+      clearTimeout(timeoutId);
+      // 30 minutes in milliseconds = 30 * 60 * 1000 = 1800000
+      timeoutId = setTimeout(handleAutoLogout, 30 * 60 * 1000);
+    };
+
+    const handleAutoLogout = async () => {
+      console.log('Inactivity auto-logout triggered (30 minutes reached).');
+      await supabase.auth.signOut();
+      localStorage.clear();
+      router.push('/login');
+      router.refresh();
+    };
+
+    const events = ['mousemove', 'keydown', 'mousedown', 'click', 'scroll', 'touchstart'];
+    events.forEach(e => {
+      window.addEventListener(e, resetInactivityTimer);
+    });
+
+    resetInactivityTimer();
+
+    return () => {
+      clearTimeout(timeoutId);
+      events.forEach(e => {
+        window.removeEventListener(e, resetInactivityTimer);
+      });
+    };
+  }, [supabase, router]);
 
   const toggleTheme = () => {
     const newTheme = theme === 'light' ? 'dark' : 'light';
@@ -71,8 +103,6 @@ export default function Shell({ activeTab, setActiveTab, children }: ShellProps)
     router.refresh();
   };
 
-
-
   // Nav Items configuration for laptop sidebar
   const menuItems = [
     { id: 'dashboard', name: 'Dashboard', icon: LayoutDashboard },
@@ -83,15 +113,16 @@ export default function Shell({ activeTab, setActiveTab, children }: ShellProps)
     { id: 'reversals', name: 'Reversals', icon: Scale },
     { id: 'analytics', name: 'Analytics', icon: TrendingUp },
     { id: 'audit', name: 'Audit Logs', icon: History },
+    { id: 'settings', name: 'Settings', icon: Settings },
   ];
 
   // Mobile navigation tabs mapping (groups operations into one tab)
   const mobileNavItems = [
     { id: 'dashboard', name: 'Dashboard', icon: LayoutDashboard },
     { id: 'transactions', name: 'Transactions', icon: Receipt },
-    { id: 'stk', name: 'Operations', icon: CreditCard }, // Will display STK Push, B2C and Reversal triggers
+    { id: 'stk', name: 'Operations', icon: CreditCard }, 
     { id: 'analytics', name: 'Analytics', icon: TrendingUp },
-    { id: 'audit', name: 'Audit Logs', icon: History },
+    { id: 'settings', name: 'Settings', icon: Settings },
   ];
 
   return (
@@ -126,7 +157,7 @@ export default function Shell({ activeTab, setActiveTab, children }: ShellProps)
           </div>
           <button 
             onClick={() => setCollapsed(!collapsed)}
-            className="p-1.5 hover:bg-background border border-border-main rounded-md hidden md:block shrink-0 transition-colors"
+            className="p-1.5 hover:bg-background border border-border-main rounded-md hidden md:block shrink-0 transition-colors cursor-pointer"
           >
             {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
           </button>
@@ -143,7 +174,7 @@ export default function Shell({ activeTab, setActiveTab, children }: ShellProps)
               <button
                 key={item.id}
                 onClick={() => setActiveTab(item.id)}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all group duration-150 relative ${
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all group duration-150 relative cursor-pointer ${
                   activeTab === item.id
                     ? 'bg-accent/10 text-accent'
                     : 'hover:bg-background text-muted-main hover:text-text-main'
@@ -165,7 +196,6 @@ export default function Shell({ activeTab, setActiveTab, children }: ShellProps)
 
         {/* Bottom Profile */}
         <div className="p-4 border-t border-border-main space-y-2 shrink-0">
-
           <div className="flex items-center gap-3 py-2 px-2 hover:bg-background rounded-lg transition-colors overflow-hidden">
             <div className="w-8 h-8 rounded-full bg-border-main flex items-center justify-center shrink-0">
               <User size={16} />
@@ -175,7 +205,7 @@ export default function Shell({ activeTab, setActiveTab, children }: ShellProps)
                 <p className="text-xs font-semibold truncate leading-tight">{userEmail}</p>
                 <button 
                   onClick={handleLogout}
-                  className="text-[10px] text-danger font-medium hover:underline block leading-tight mt-0.5"
+                  className="text-[10px] text-danger font-medium hover:underline block leading-tight mt-0.5 cursor-pointer"
                 >
                   Logout
                 </button>
@@ -214,12 +244,10 @@ export default function Shell({ activeTab, setActiveTab, children }: ShellProps)
           </div>
 
           <div className="flex items-center gap-2">
-
-
             {/* Light/Dark Toggle */}
             <button
               onClick={toggleTheme}
-              className="p-2 border border-border-main hover:bg-background rounded-lg text-muted-main hover:text-text-main transition-colors duration-200"
+              className="p-2 border border-border-main hover:bg-background rounded-lg text-muted-main hover:text-text-main transition-colors duration-200 cursor-pointer"
               aria-label="Toggle theme"
             >
               {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
@@ -228,7 +256,7 @@ export default function Shell({ activeTab, setActiveTab, children }: ShellProps)
             <div className="md:hidden flex items-center">
               <button 
                 onClick={handleLogout}
-                className="px-2.5 py-1 text-xs border border-border-main hover:bg-background rounded-lg text-danger font-medium transition-colors"
+                className="px-2.5 py-1 text-xs border border-border-main hover:bg-background rounded-lg text-danger font-medium transition-colors cursor-pointer"
               >
                 Logout
               </button>
@@ -256,7 +284,6 @@ export default function Shell({ activeTab, setActiveTab, children }: ShellProps)
         <nav className="md:hidden fixed bottom-0 left-0 right-0 h-16 border-t border-border-main bg-panel flex justify-around items-center px-2 pb-safe z-30">
           {mobileNavItems.map((item) => {
             const Icon = item.icon;
-            // Handle Operations group selection (includes stk, b2c, reversals tabs)
             const isSelected = item.id === 'stk'
               ? (activeTab === 'stk' || activeTab === 'b2c' || activeTab === 'reversals' || activeTab === 'balance')
               : activeTab === item.id;
@@ -265,7 +292,7 @@ export default function Shell({ activeTab, setActiveTab, children }: ShellProps)
               <button
                 key={item.id}
                 onClick={() => setActiveTab(item.id)}
-                className={`flex flex-col items-center justify-center w-16 h-12 rounded-lg relative ${
+                className={`flex flex-col items-center justify-center w-16 h-12 rounded-lg relative cursor-pointer ${
                   isSelected ? 'text-accent' : 'text-muted-main'
                 }`}
               >
@@ -285,8 +312,6 @@ export default function Shell({ activeTab, setActiveTab, children }: ShellProps)
           })}
         </nav>
       </div>
-
-
 
     </div>
   );

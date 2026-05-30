@@ -5,6 +5,23 @@ All notable changes to the Skylink Bundlefasta Dashboard project will be documen
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to Semantic Versioning.
 
+## [1.1.6] - 2026-05-30
+
+### Added
+- Created dedicated [reset-password](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/app/reset-password/page.tsx) password-update page to handle password recovery.
+- Created [SettingsView.tsx](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/components/views/SettingsView.tsx) component for managing security PIN updates and admin password changes.
+- Added Settings tab configuration to laptop sidebar and mobile bottom menus inside [Shell.tsx](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/components/layout/Shell.tsx) and [page.tsx](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/app/dashboard/page.tsx).
+
+### Changed
+- Mapped STK transaction fallback source stream name to `System` inside [TransactionsView.tsx](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/components/views/TransactionsView.tsx) instead of rendering as `Unknown`.
+- Overhauled [AnalyticsView.tsx](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/components/views/AnalyticsView.tsx) with date range selection (Today, Last 7 Days, Custom Range), channel filtering, KPI metric deltas comparing preceding periods, and 4 performance visualizations (Volume Trend Area, Channel Pie, Inflow/Outflow Flow Bar, and Hour Peak Hours Chart).
+- Overhauled [AuditView.tsx](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/components/views/AuditView.tsx) with a Detail overlay modal displaying detailed metadata parameter lists, cross-referenced transaction metrics, and nearest resulting balances snapshots.
+- Added row selection checkboxes, select-all master header toggles, and contextual CSV Export/Delete bulk actions to [TransactionsView.tsx](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/components/views/TransactionsView.tsx).
+- Added eye-icon visibility toggle buttons to password and admin keyword text fields inside [page.tsx](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/app/login/page.tsx) with sliding Framer Motion entry transition animations.
+- Implemented a 30-minute inactivity auto-logout listener hook inside [Shell.tsx](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/components/layout/Shell.tsx) wrapping all dashboard modules.
+
+---
+
 ## [1.1.5] - 2026-05-30
 
 ### Changed
