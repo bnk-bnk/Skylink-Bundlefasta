@@ -257,22 +257,26 @@ export default function LoginPage() {
                   )}
                 </button>
 
-                <div className="relative flex items-center justify-center my-4">
-                  <div className="w-full border-t border-brand-border"></div>
-                  <span className="relative bg-brand-panel px-3 text-[10px] font-semibold text-brand-text/60 uppercase tracking-wider">
-                    Development Shortcut
-                  </span>
-                </div>
+                {process.env.NODE_ENV !== 'production' && (
+                  <>
+                    <div className="relative flex items-center justify-center my-4">
+                      <div className="w-full border-t border-brand-border"></div>
+                      <span className="relative bg-brand-panel px-3 text-[10px] font-semibold text-brand-text/60 uppercase tracking-wider">
+                        Development Shortcut
+                      </span>
+                    </div>
 
-                <button
-                  type="button"
-                  onClick={handleDemoLogin}
-                  disabled={isLoading || demoLoading}
-                  className="w-full py-2.5 px-4 bg-brand-panel hover:bg-brand-bg border border-brand-border text-brand-accent rounded-xl font-medium transition-all focus:outline-none focus:ring-2 focus:ring-brand-accent text-xs flex items-center justify-center gap-2 cursor-pointer shadow-sm"
-                >
-                  <Zap size={12} className={demoLoading ? 'animate-bounce' : ''} />
-                  {demoLoading ? 'Auto-Seeding...' : 'Quick Demo Seed & Login'}
-                </button>
+                    <button
+                      type="button"
+                      onClick={handleDemoLogin}
+                      disabled={isLoading || demoLoading}
+                      className="w-full py-2.5 px-4 bg-brand-panel hover:bg-brand-bg border border-brand-border text-brand-accent rounded-xl font-medium transition-all focus:outline-none focus:ring-2 focus:ring-brand-accent text-xs flex items-center justify-center gap-2 cursor-pointer shadow-sm"
+                    >
+                      <Zap size={12} className={demoLoading ? 'animate-bounce' : ''} />
+                      {demoLoading ? 'Auto-Seeding...' : 'Quick Demo Seed & Login'}
+                    </button>
+                  </>
+                )}
               </motion.form>
             ) : (
               <motion.form 

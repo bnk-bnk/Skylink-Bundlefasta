@@ -18,6 +18,10 @@ and this project adheres to Semantic Versioning.
 - Added "SMS Logs" menu options, mobile grouping mappings, and a premium mobile operations horizontal sub-tabs bar to [Shell.tsx](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/components/layout/Shell.tsx) and page renderer bindings in [page.tsx](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/app/dashboard/page.tsx).
 - Created background automated B2B split settlement dispatcher `performAutoB2bSettlement` inside [b2b.ts](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/lib/repositories/b2b.ts) triggered automatically when a transaction with a reference of `PESATRIX` or `PESAFRIX` enters, executing the 60% settlement split (KES 300 for every 500) to the Till shortcode set by the admin in Settings.
 
+### Security
+- Blocked the Development Shortcut / Demo Seeding Login helper in production environments (`NODE_ENV === 'production'`). Conditionally renders the "Quick Demo Seed & Login" button only in development view.
+- Completely removed API references, Keep documents, SQL schemas, and environment template variables from git tracking index and pushed deletion mappings to origin.
+
 ## [1.2.0] - 2026-05-30
 
 ### Added

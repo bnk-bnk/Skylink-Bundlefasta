@@ -20,6 +20,10 @@ export async function loginAction(formData: { email: string; authPin: string }) 
 }
 
 export async function demoLoginAction() {
+  if (process.env.NODE_ENV === 'production') {
+    return { success: false, error: 'Demo login is disabled in production.' };
+  }
+
   const email = 'demo@skylink.com';
   const password = 'password123';
   const defaultPin = '123456';
