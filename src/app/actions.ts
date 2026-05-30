@@ -597,3 +597,152 @@ export async function getSettlementQueueAction() {
   await checkAuth();
   return await getSettlementQueue();
 }
+
+// 17. SMS Notifications & Settings Actions
+export async function getSmsSettingsAction() {
+  await checkAuth();
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from('sms_settings')
+    .select('*')
+    .eq('id', '00000000-0000-0000-0000-000000000001')
+    .maybeSingle();
+
+  if (error) {
+    console.error('Failed to fetch SMS settings:', error);
+    throw error;
+  }
+
+  if (!data) {
+    // Seed defaults if missing
+    const adminSupabase = createAdminClient();
+    const { data: seeded, error: seedErr } = await adminSupabase
+      .from('sms_settings')
+      .insert({
+        id: '00000000-0000-0000-0000-000000000001',
+        admin_alert_phone: '',
+        sender_id: '',
+        incoming_alerts_enabled: true,
+        outgoing_alerts_enabled: true,
+        pesafrix_till_number: ''
+      })
+      .select()
+      .single();
+
+    if (seedErr) {
+      console.error('Failed to seed SMS settings:', seedErr);
+      throw seedErr;
+    }
+    return seeded;
+  }
+
+  return data;
+}
+
+export async function updateSmsSettingsAction(params: {
+  admin_alert_phone: string;
+  sender_id: string;
+  incoming_alerts_enabled: boolean;
+  outgoing_alerts_enabled: boolean;
+  pesafrix_till_number: string;
+}) {
+  const user = await checkAuth();
+  const adminSupabase = createAdminClient();
+
+  const { data, error } = await adminSupabase
+    .from('sms_settings')
+    .update({
+      admin_alert_phone: params.admin_alert_phone,
+      sender_id: params.sender_id,
+      incoming_alerts_enabled: params.incoming_alerts_enabled,
+      outgoing_alerts_enabled: params.outgoing_alerts_enabled,
+      pesafrix_till_number: params.pesafrix_till_number,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', '00000000-0000-0000-0000-000000000001')
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Failed to update SMS settings:', error);
+    throw error;
+  }
+
+  await logAudit('SMS_SETTINGS_UPDATED', {
+    userId: user.id,
+    admin_alert_phone: params.admin_alert_phone,
+    sender_id: params.sender_id,
+    incoming_alerts_enabled: params.incoming_alerts_enabled,
+    outgoing_alerts_enabled: params.outgoing_alerts_enabled,
+    pesafrix_till_number: params.pesafrix_till_number
+  });
+
+  return data;
+}
+
+export async function getSmsNotificationsAction(filters: {
+  status?: string;
+  phone?: string;
+  limit?: number;
+  offset?: number;
+} = {}) {
+  await checkAuth();
+  const supabase = await createClient();
+
+  let query = supabase
+    .from('sms_notifications')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (filters.status) {
+    query = query.eq('status', filters.status);
+  }
+  if (filters.phone) {
+    query = query.ilike('phone', `%${filters.phone}%`);
+  }
+
+  const limit = filters.limit || 50;
+  const offset = filters.offset || 0;
+  query = query.range(offset, offset + limit - 1);
+
+  const { data, error } = await query;
+  if (error) {
+    console.error('Failed to fetch SMS notifications:', error);
+    return [];
+  }
+
+  return data || [];
+}
+
+export async function getSmsStatsAction() {
+  await checkAuth();
+  const supabase = await createClient();
+
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const todayISO = todayStart.toISOString();
+
+  // Sent Today (status = 'SENT' and created_at >= today)
+  const { count: sentToday, error: sentErr } = await supabase
+    .from('sms_notifications')
+    .select('*', { count: 'exact', head: true })
+    .eq('status', 'SENT')
+    .gte('created_at', todayISO);
+
+  if (sentErr) console.error('Error fetching sent SMS stats:', sentErr);
+
+  // Failed Today (status = 'FAILED' and created_at >= today)
+  const { count: failedToday, error: failedErr } = await supabase
+    .from('sms_notifications')
+    .select('*', { count: 'exact', head: true })
+    .eq('status', 'FAILED')
+    .gte('created_at', todayISO);
+
+  if (failedErr) console.error('Error fetching failed SMS stats:', failedErr);
+
+  return {
+    sentToday: sentToday || 0,
+    failedToday: failedToday || 0
+  };
+}

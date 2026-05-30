@@ -3,6 +3,7 @@ import { createTransaction } from '@/lib/repositories/transactions';
 import { createAdminClient } from '@/lib/supabase/server';
 import { logSystemAudit } from '@/lib/repositories/audit';
 import { triggerSettlementRule } from '@/lib/repositories/b2b';
+import { triggerSmsNotification } from '@/lib/sms/send-sms';
 
 export async function POST(req: Request) {
   try {
@@ -43,6 +44,16 @@ export async function POST(req: Request) {
     if (transaction && transaction.id) {
       await triggerSettlementRule(transaction.id, transaction.account_reference, transaction.amount);
     }
+
+    // Trigger SMS alerts in background (side-effect)
+    triggerSmsNotification({
+      direction: 'IN',
+      transaction_type: 'C2B',
+      amount,
+      account_reference: reference,
+      phone_number: phone,
+      mpesa_receipt: TransID
+    });
 
     // Write a balance snapshot if OrgAccountBalance is available
     if (OrgAccountBalance) {

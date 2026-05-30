@@ -9,7 +9,8 @@ import {
   ArrowDownLeft,
   Scale,
   RefreshCw,
-  Wallet
+  Wallet,
+  Mail
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -28,13 +29,14 @@ import {
   Tooltip,
   Legend
 } from 'recharts';
-import { getDashboardStatsAction, getAnalyticsAction } from '@/app/actions';
+import { getDashboardStatsAction, getAnalyticsAction, getSmsStatsAction } from '@/app/actions';
 
 const COLORS = ['#00BFFF', '#0DB02B', '#FF4500', '#FF3B30', '#6B7280'];
 
 export default function DashboardView() {
   const [stats, setStats] = useState<any>(null);
   const [analytics, setAnalytics] = useState<any>(null);
+  const [smsStats, setSmsStats] = useState<{ sentToday: number; failedToday: number } | null>(null);
   const [loading, setLoading] = useState(true);
 
   const loadData = async () => {
@@ -42,8 +44,10 @@ export default function DashboardView() {
     try {
       const s = await getDashboardStatsAction();
       const a = await getAnalyticsAction();
+      const sms = await getSmsStatsAction();
       setStats(s);
       setAnalytics(a);
+      setSmsStats(sms);
     } catch (err) {
       console.error(err);
     } finally {
@@ -59,8 +63,8 @@ export default function DashboardView() {
     return (
       <div className="space-y-6 animate-pulse">
         {/* Metric Cards Skeleton */}
-        <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
-          {[...Array(6)].map((_, i) => (
+        <div className="grid grid-cols-2 lg:grid-cols-7 gap-4">
+          {[...Array(7)].map((_, i) => (
             <div key={i} className="bg-panel border border-border-main rounded-xl p-4 h-28" />
           ))}
         </div>
@@ -123,6 +127,13 @@ export default function DashboardView() {
       icon: Scale,
       color: 'text-muted-main bg-muted-main/10',
     },
+    {
+      title: 'SMS Alerts',
+      value: `Sent: ${smsStats?.sentToday || 0}`,
+      desc: `Failed: ${smsStats?.failedToday || 0}`,
+      icon: Mail,
+      color: 'text-warning-main bg-warning-main/10',
+    },
   ];
 
   const chartsData = analytics?.charts || {
@@ -136,7 +147,7 @@ export default function DashboardView() {
     <div className="space-y-6">
       
       {/* KPI Cards Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-7 gap-4">
         {cards.map((card, i) => {
           const Icon = card.icon;
           return (

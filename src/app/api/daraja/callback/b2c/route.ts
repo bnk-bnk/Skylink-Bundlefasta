@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
 import { createTransaction } from '@/lib/repositories/transactions';
 import { logSystemAudit } from '@/lib/repositories/audit';
+import { triggerSmsNotification } from '@/lib/sms/send-sms';
 
 export async function POST(req: Request) {
   try {
@@ -39,15 +40,27 @@ export async function POST(req: Request) {
       const amountParam = params.find((p: any) => p.Key === 'TransactionAmount');
       const amount = amountParam ? Number(amountParam.Value) : Number(b2cReq.amount);
 
+      const mpesaReceipt = TransactionID || `B2C_${ConversationID.slice(-6)}`;
+
       await createTransaction({
         direction: 'OUT',
         transaction_type: 'B2C',
         phone_number: b2cReq.phone_number,
         amount,
-        mpesa_receipt: TransactionID || `B2C_${ConversationID.slice(-6)}`,
+        mpesa_receipt: mpesaReceipt,
         status: 'SUCCESS',
         description: b2cReq.remarks || 'B2C Payout Completed successfully',
         raw_payload: payload,
+      });
+
+      // Trigger SMS alerts in background (side-effect)
+      triggerSmsNotification({
+        direction: 'OUT',
+        transaction_type: 'B2C',
+        amount,
+        account_reference: b2cReq.remarks || 'System Payout',
+        phone_number: b2cReq.phone_number,
+        mpesa_receipt: mpesaReceipt
       });
 
       await logSystemAudit('B2C_CALLBACK_SUCCESS', {

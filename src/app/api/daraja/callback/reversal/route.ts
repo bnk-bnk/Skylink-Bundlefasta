@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
 import { createTransaction } from '@/lib/repositories/transactions';
 import { logSystemAudit } from '@/lib/repositories/audit';
+import { triggerSmsNotification } from '@/lib/sms/send-sms';
 
 export async function POST(req: Request) {
   try {
@@ -58,16 +59,28 @@ export async function POST(req: Request) {
         
       const phoneNumber = originalTx?.phone_number || null;
 
+      const mpesaReceipt = TransactionID || `REV_${ConversationID.slice(-6)}`;
+
       await createTransaction({
         direction,
         transaction_type: 'REVERSAL',
         account_reference: originalTx?.account_reference || null,
         phone_number: phoneNumber,
         amount,
-        mpesa_receipt: TransactionID || `REV_${ConversationID.slice(-6)}`,
+        mpesa_receipt: mpesaReceipt,
         status: 'SUCCESS',
         description: revReq.reason || 'Transaction Reversal processed successfully',
         raw_payload: payload,
+      });
+
+      // Trigger SMS alerts in background (side-effect)
+      triggerSmsNotification({
+        direction,
+        transaction_type: 'REVERSAL',
+        amount,
+        account_reference: originalTx?.account_reference || 'Reversal Ref',
+        phone_number: phoneNumber,
+        mpesa_receipt: mpesaReceipt
       });
 
       // Update original transaction status to REVERSED if we want

@@ -5,6 +5,19 @@ All notable changes to the Skylink Bundlefasta Dashboard project will be documen
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to Semantic Versioning.
 
+## [1.3.0] - 2026-05-30
+
+### Added
+- Integrated BlazeTech Scope SMS Notification Alerts in successful webhook callbacks: STK callback [route.ts](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/app/api/daraja/callback/stk/route.ts), C2B callback [route.ts](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/app/api/daraja/callback/c2b/route.ts), B2C callback [route.ts](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/app/api/daraja/callback/b2c/route.ts), Reversal callback [route.ts](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/app/api/daraja/callback/reversal/route.ts), and B2B callback [route.ts](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/app/api/mpesa/b2b/result/route.ts).
+- Created a background, non-blocking SMS alert helper `triggerSmsNotification` inside [send-sms.ts](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/lib/sms/send-sms.ts) using Axios with a 30s timeout to hit the provider endpoints.
+- Created database migration schemas for `sms_notifications` and `sms_settings` tables in [supabase_schema.sql](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/supabase_schema.sql) and registered typings inside [database.ts](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/types/database.ts).
+- Exposed server actions inside [actions.ts](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/app/actions.ts) for reading and updating settings, logging audits (`SMS_SENT`, `SMS_FAILED`, `SMS_SETTINGS_UPDATED`), retrieving stats, and loading notification pages.
+- Created the premium, responsive [NotificationsView.tsx](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/components/views/NotificationsView.tsx) component displaying detailed SMS logs with status/search filtering, and realtime Supabase channel subscriptions.
+- Added a dedicated "SMS Alerts" widget card inside [DashboardView.tsx](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/components/views/DashboardView.tsx) reporting sent and failed alerts.
+- Configured a new Settings card inside [SettingsView.tsx](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/components/views/SettingsView.tsx) to configure alert phone lines, sender IDs, alert switches, and automated split settlement Till numbers.
+- Added "SMS Logs" menu options, mobile grouping mappings, and a premium mobile operations horizontal sub-tabs bar to [Shell.tsx](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/components/layout/Shell.tsx) and page renderer bindings in [page.tsx](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/app/dashboard/page.tsx).
+- Created background automated B2B split settlement dispatcher `performAutoB2bSettlement` inside [b2b.ts](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/lib/repositories/b2b.ts) triggered automatically when a transaction with a reference of `PESATRIX` or `PESAFRIX` enters, executing the 60% settlement split (KES 300 for every 500) to the Till shortcode set by the admin in Settings.
+
 ## [1.2.0] - 2026-05-30
 
 ### Added

@@ -409,6 +409,73 @@ export interface Database {
           created_at?: string;
         };
       };
+      sms_notifications: {
+        Row: {
+          id: string;
+          phone: string;
+          message: string;
+          message_id: string | null;
+          status: string;
+          provider_response: any | null;
+          error_message: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          phone: string;
+          message: string;
+          message_id?: string | null;
+          status?: string;
+          provider_response?: any | null;
+          error_message?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          phone?: string;
+          message?: string;
+          message_id?: string | null;
+          status?: string;
+          provider_response?: any | null;
+          error_message?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      sms_settings: {
+        Row: {
+          id: string;
+          admin_alert_phone: string;
+          sender_id: string;
+          incoming_alerts_enabled: boolean;
+          outgoing_alerts_enabled: boolean;
+          pesafrix_till_number: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          admin_alert_phone?: string;
+          sender_id?: string;
+          incoming_alerts_enabled?: boolean;
+          outgoing_alerts_enabled?: boolean;
+          pesafrix_till_number?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          admin_alert_phone?: string;
+          sender_id?: string;
+          incoming_alerts_enabled?: boolean;
+          outgoing_alerts_enabled?: boolean;
+          pesafrix_till_number?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
     };
   };
 }
@@ -426,4 +493,6 @@ export type AuditLog = Database['public']['Tables']['audit_logs']['Row'];
 export type B2bRequest = Database['public']['Tables']['b2b_requests']['Row'];
 export type SettlementRule = Database['public']['Tables']['settlement_rules']['Row'];
 export type SettlementQueue = Database['public']['Tables']['settlement_queue']['Row'];
+export type SmsNotification = Database['public']['Tables']['sms_notifications']['Row'];
+export type SmsSettings = Database['public']['Tables']['sms_settings']['Row'];
 

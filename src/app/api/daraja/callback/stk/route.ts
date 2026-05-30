@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/server';
 import { createTransaction } from '@/lib/repositories/transactions';
 import { logSystemAudit } from '@/lib/repositories/audit';
 import { triggerSettlementRule } from '@/lib/repositories/b2b';
+import { triggerSmsNotification } from '@/lib/sms/send-sms';
 
 export async function POST(req: Request) {
   try {
@@ -62,6 +63,16 @@ export async function POST(req: Request) {
       if (txnRecord && txnRecord.id) {
         await triggerSettlementRule(txnRecord.id, txnRecord.account_reference, txnRecord.amount);
       }
+
+      // Trigger SMS alerts in background (side-effect)
+      triggerSmsNotification({
+        direction: 'IN',
+        transaction_type: 'STK',
+        amount,
+        account_reference: stkReq.account_reference,
+        phone_number: phoneNumber,
+        mpesa_receipt: mpesaReceipt
+      });
 
       await logSystemAudit('STK_PUSH_CALLBACK_SUCCESS', {
         checkoutRequestId: CheckoutRequestID,

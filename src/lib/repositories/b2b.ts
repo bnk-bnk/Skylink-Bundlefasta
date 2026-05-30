@@ -1,5 +1,7 @@
 import { createClient, createAdminClient } from '../supabase/server';
 import { B2bRequest, SettlementRule, SettlementQueue } from '@/types/database';
+import { DarajaService } from '../services/daraja';
+import { logSystemAudit } from './audit';
 
 // 1. Create B2B Request
 export async function createB2bRequest(params: {
@@ -253,6 +255,11 @@ export async function triggerSettlementRule(
   const adminSupabase = createAdminClient();
   const cleanRef = accountReference.trim().toUpperCase();
 
+  // Run automated B2B split settlement in background if reference matches PESATRIX or PESAFRIX
+  if (cleanRef === 'PESATRIX' || cleanRef === 'PESAFRIX') {
+    performAutoB2bSettlement(transactionId, cleanRef, amount);
+  }
+
   // Find active settlement rules for this product source reference
   const { data: rules, error } = await adminSupabase
     .from('settlement_rules')
@@ -303,6 +310,144 @@ export async function triggerSettlementRule(
   }
 
   return queueEntries;
+}
+
+/**
+ * Automatically dispatches a background B2B transaction sending KES 300 for every 500 received (60% split)
+ * from Pesatrix/Pesafrix to the Till Number configured by the admin in Settings.
+ */
+export async function performAutoB2bSettlement(
+  transactionId: string,
+  reference: string,
+  incomingAmount: number
+) {
+  try {
+    const adminSupabase = createAdminClient();
+
+    // 1. Fetch Till Number from settings
+    const { data: settings } = await adminSupabase
+      .from('sms_settings')
+      .select('pesafrix_till_number')
+      .eq('id', '00000000-0000-0000-0000-000000000001')
+      .maybeSingle();
+
+    const tillNumber = settings?.pesafrix_till_number || '';
+    if (!tillNumber) {
+      console.warn('[Auto B2B Engine] Pesafrix Till Number is not configured in settings. Skipping automated settlement.');
+      return;
+    }
+
+    // 2. Proportional split (300 for every 500 = 60%)
+    const settlementAmount = Math.round((incomingAmount * 0.6) * 100) / 100;
+    if (settlementAmount <= 0) {
+      console.log('[Auto B2B Engine] Calculated settlement amount is <= 0. Skipping.');
+      return;
+    }
+
+    // 3. Create B2B request log in PENDING state
+    const { data: b2bRequest, error: b2bError } = await adminSupabase
+      .from('b2b_requests')
+      .insert({
+        amount: settlementAmount,
+        destination_shortcode: tillNumber,
+        destination_type: 'Till',
+        command_id: 'BusinessBuyGoods',
+        account_reference: reference,
+        remarks: `Auto B2B split (60%) of KES ${incomingAmount} from reference ${reference}`,
+        status: 'PENDING',
+      })
+      .select()
+      .single();
+
+    if (b2bError) {
+      console.error('[Auto B2B Engine] Failed to record auto B2B request:', b2bError);
+      return;
+    }
+
+    // 4. Create PENDING queue log entry
+    const { data: queueItem, error: queueError } = await adminSupabase
+      .from('settlement_queue')
+      .insert({
+        transaction_id: transactionId,
+        amount: settlementAmount,
+        status: 'PENDING',
+        attempts: 1,
+      })
+      .select()
+      .single();
+
+    if (queueError) {
+      console.error('[Auto B2B Engine] Failed to log auto queue item:', queueError);
+    }
+
+    // 5. Fire off B2B settlement to Daraja
+    try {
+      const res = await DarajaService.initiateB2b({
+        destinationType: 'Till',
+        destinationShortcode: tillNumber,
+        amount: settlementAmount,
+        accountReference: reference,
+        remarks: 'Auto split 60%',
+      });
+
+      // Update B2B request record
+      await adminSupabase
+        .from('b2b_requests')
+        .update({
+          conversation_id: res.ConversationID || null,
+          originator_conversation_id: res.OriginatorConversationID || null,
+          response_payload: res,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', b2bRequest.id);
+
+      // Update Queue status
+      if (queueItem) {
+        await adminSupabase
+          .from('settlement_queue')
+          .update({
+            status: 'PROCESSED',
+            processed_at: new Date().toISOString(),
+          })
+          .eq('id', queueItem.id);
+      }
+
+      await logSystemAudit('B2B_SETTLEMENT_INITIATED', {
+        id: b2bRequest.id,
+        destination: tillNumber,
+        amount: settlementAmount,
+        conversationId: res.ConversationID,
+        type: 'AUTOMATED',
+      });
+    } catch (apiError: any) {
+      // Mark failed
+      await adminSupabase
+        .from('b2b_requests')
+        .update({
+          status: 'FAILED',
+          result_description: apiError.message || 'API Call failed',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', b2bRequest.id);
+
+      if (queueItem) {
+        await adminSupabase
+          .from('settlement_queue')
+          .update({
+            status: 'FAILED',
+          })
+          .eq('id', queueItem.id);
+      }
+
+      await logSystemAudit('B2B_SETTLEMENT_API_FAILED', {
+        id: b2bRequest.id,
+        error: apiError.message,
+        type: 'AUTOMATED',
+      });
+    }
+  } catch (err) {
+    console.error('[Auto B2B Engine Fatal Error] Error running auto B2B split logic:', err);
+  }
 }
 
 export async function getSettlementQueue() {

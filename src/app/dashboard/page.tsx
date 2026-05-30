@@ -14,6 +14,7 @@ import AnalyticsView from '@/components/views/AnalyticsView';
 import AuditView from '@/components/views/AuditView';
 import SettingsView from '@/components/views/SettingsView';
 import SettlementView from '@/components/views/SettlementView';
+import NotificationsView from '@/components/views/NotificationsView';
 
 export default function DashboardRootPage() {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -40,6 +41,8 @@ export default function DashboardRootPage() {
         return <AuditView />;
       case 'settings':
         return <SettingsView />;
+      case 'notifications':
+        return <NotificationsView />;
       default:
         return <DashboardView />;
     }

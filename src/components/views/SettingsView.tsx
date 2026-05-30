@@ -1,8 +1,15 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Shield, Key, Eye, EyeOff, CheckCircle2, AlertCircle, RefreshCw } from 'lucide-react';
-import { hasPinAction, verifyPinAction, setPinAction, updatePasswordAction } from '@/app/actions';
+import { Shield, Key, Eye, EyeOff, CheckCircle2, AlertCircle, RefreshCw, Mail } from 'lucide-react';
+import {
+  hasPinAction,
+  verifyPinAction,
+  setPinAction,
+  updatePasswordAction,
+  getSmsSettingsAction,
+  updateSmsSettingsAction
+} from '@/app/actions';
 
 export default function SettingsView() {
   // PIN states
@@ -24,6 +31,17 @@ export default function SettingsView() {
   const [passError, setPassError] = useState('');
   const [passSuccess, setPassSuccess] = useState('');
 
+  // SMS Alert States
+  const [adminPhone, setAdminPhone] = useState('');
+  const [senderId, setSenderId] = useState('');
+  const [incomingEnabled, setIncomingEnabled] = useState(true);
+  const [outgoingEnabled, setOutgoingEnabled] = useState(true);
+  const [pesafrixTillNumber, setPesafrixTillNumber] = useState('');
+  
+  const [smsLoading, setSmsLoading] = useState(false);
+  const [smsError, setSmsError] = useState('');
+  const [smsSuccess, setSmsSuccess] = useState('');
+
   const checkPinConfiguration = async () => {
     try {
       const config = await hasPinAction();
@@ -33,8 +51,24 @@ export default function SettingsView() {
     }
   };
 
+  const loadSmsSettings = async () => {
+    try {
+      const data = await getSmsSettingsAction();
+      if (data) {
+        setAdminPhone(data.admin_alert_phone || '');
+        setSenderId(data.sender_id || '');
+        setIncomingEnabled(data.incoming_alerts_enabled);
+        setOutgoingEnabled(data.outgoing_alerts_enabled);
+        setPesafrixTillNumber(data.pesafrix_till_number || '');
+      }
+    } catch (err) {
+      console.error('Failed to load SMS settings:', err);
+    }
+  };
+
   useEffect(() => {
     checkPinConfiguration();
+    loadSmsSettings();
   }, []);
 
   const handlePinSubmit = async (e: React.FormEvent) => {
@@ -118,6 +152,28 @@ export default function SettingsView() {
       setPassError(err.message || 'An error occurred.');
     } finally {
       setPassLoading(false);
+    }
+  };
+
+  const handleSmsSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSmsError('');
+    setSmsSuccess('');
+    setSmsLoading(true);
+
+    try {
+      await updateSmsSettingsAction({
+        admin_alert_phone: adminPhone,
+        sender_id: senderId,
+        incoming_alerts_enabled: incomingEnabled,
+        outgoing_alerts_enabled: outgoingEnabled,
+        pesafrix_till_number: pesafrixTillNumber
+      });
+      setSmsSuccess('Configurations updated successfully.');
+    } catch (err: any) {
+      setSmsError(err.message || 'Failed to update configurations.');
+    } finally {
+      setSmsLoading(false);
     }
   };
 
@@ -297,6 +353,125 @@ export default function SettingsView() {
                   </>
                 ) : (
                   <span>Update Password</span>
+                )}
+              </button>
+            </form>
+          </div>
+        </div>
+
+        {/* Card 3: SMS Alerts Configuration */}
+        <div className="bg-panel border border-border-main rounded-2xl p-5 md:p-6 shadow-sm flex flex-col justify-between">
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <div className="p-2 bg-warning-main/10 text-warning-main rounded-lg">
+                <Mail size={20} />
+              </div>
+              <div>
+                <h3 className="font-bold text-sm text-text-main">SMS Alert Configuration</h3>
+                <p className="text-xs text-muted-main">Configure administrator phone alert rules for PayBill inflows and outflows</p>
+              </div>
+            </div>
+
+            <form onSubmit={handleSmsSubmit} className="space-y-4 pt-2">
+              {smsError && (
+                <div className="p-3 rounded-xl bg-danger/10 border border-danger/20 text-danger text-xs font-semibold flex items-center gap-1.5">
+                  <AlertCircle size={14} />
+                  <span>{smsError}</span>
+                </div>
+              )}
+
+              {smsSuccess && (
+                <div className="p-3 rounded-xl bg-success-main/10 border border-success-main/20 text-success-main text-xs font-semibold flex items-center gap-1.5">
+                  <CheckCircle2 size={14} />
+                  <span>{smsSuccess}</span>
+                </div>
+              )}
+
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-text-main/70 ml-0.5">Admin Alert Phone</label>
+                <input
+                  type="text"
+                  required
+                  value={adminPhone}
+                  onChange={e => setAdminPhone(e.target.value)}
+                  className="w-full bg-background border border-border-main rounded-xl py-2 px-3 focus:outline-none focus:ring-2 focus:ring-accent sm:text-xs text-text-main font-mono"
+                  placeholder="2547XXXXXXXX"
+                />
+                <p className="text-[9px] text-muted-main">Alert messages will be sent to this phone number</p>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-text-main/70 ml-0.5">Sender ID</label>
+                <input
+                  type="text"
+                  required
+                  value={senderId}
+                  onChange={e => setSenderId(e.target.value)}
+                  className="w-full bg-background border border-border-main rounded-xl py-2 px-3 focus:outline-none focus:ring-2 focus:ring-accent sm:text-xs text-text-main font-mono"
+                  placeholder="e.g. BLAZETECH"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-text-main/70 ml-0.5">Pesafrix Settlement Till</label>
+                <input
+                  type="text"
+                  value={pesafrixTillNumber}
+                  onChange={e => setPesafrixTillNumber(e.target.value)}
+                  className="w-full bg-background border border-border-main rounded-xl py-2 px-3 focus:outline-none focus:ring-2 focus:ring-accent sm:text-xs text-text-main font-mono"
+                  placeholder="e.g. 543210"
+                />
+                <p className="text-[9px] text-muted-main">Till number used by the auto B2B settlement engine for PESATRIX/PESAFRIX transactions</p>
+              </div>
+
+              <div className="space-y-3 pt-2">
+                <label className="text-xs font-semibold text-text-main/80 block">Alert Toggles</label>
+                
+                <div className="flex items-center justify-between py-1 border-b border-border-main/55">
+                  <div>
+                    <span className="text-xs font-medium text-text-main">Incoming Alerts</span>
+                    <p className="text-[10px] text-muted-main">Receive alerts on successful C2B/STK push payments</p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={incomingEnabled}
+                      onChange={e => setIncomingEnabled(e.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-9 h-5 bg-border-main peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-accent"></div>
+                  </label>
+                </div>
+
+                <div className="flex items-center justify-between py-1">
+                  <div>
+                    <span className="text-xs font-medium text-text-main">Outgoing Alerts</span>
+                    <p className="text-[10px] text-muted-main">Receive alerts on B2C payouts, B2B settlements, and reversals</p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={outgoingEnabled}
+                      onChange={e => setOutgoingEnabled(e.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-9 h-5 bg-border-main peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-accent"></div>
+                  </label>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={smsLoading || !adminPhone || !senderId}
+                className="w-full mt-2 py-2 px-4 bg-accent hover:opacity-90 text-panel rounded-xl text-xs font-semibold transition-all focus:outline-none disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
+              >
+                {smsLoading ? (
+                  <>
+                    <RefreshCw className="animate-spin text-panel" size={14} />
+                    <span>Saving configurations...</span>
+                  </>
+                ) : (
+                  <span>Save Configurations</span>
                 )}
               </button>
             </form>

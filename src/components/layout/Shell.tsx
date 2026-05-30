@@ -21,7 +21,8 @@ import {
   CreditCard,
   Plus,
   Settings,
-  Layers
+  Layers,
+  Mail
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 
@@ -115,6 +116,7 @@ export default function Shell({ activeTab, setActiveTab, children }: ShellProps)
     { id: 'settlement', name: 'Settlement', icon: Layers },
     { id: 'analytics', name: 'Analytics', icon: TrendingUp },
     { id: 'audit', name: 'Audit Logs', icon: History },
+    { id: 'notifications', name: 'SMS Logs', icon: Mail },
     { id: 'settings', name: 'Settings', icon: Settings },
   ];
 
@@ -266,6 +268,35 @@ export default function Shell({ activeTab, setActiveTab, children }: ShellProps)
           </div>
         </header>
 
+        {/* Mobile sub-tabs for operations */}
+        {['stk', 'b2c', 'reversals', 'settlement', 'balance', 'notifications'].includes(activeTab) && (
+          <div className="md:hidden border-b border-border-main bg-panel overflow-x-auto flex px-4 py-2 gap-2 shrink-0 scrollbar-none">
+            {[
+              { id: 'stk', name: 'STK Push' },
+              { id: 'b2c', name: 'B2C Payout' },
+              { id: 'reversals', name: 'Reversals' },
+              { id: 'settlement', name: 'Settlement' },
+              { id: 'balance', name: 'Balance' },
+              { id: 'notifications', name: 'SMS Logs' }
+            ].map((tab) => {
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all duration-150 cursor-pointer ${
+                    isActive
+                      ? 'bg-accent/15 text-accent border border-accent/25'
+                      : 'bg-background hover:bg-background/80 text-muted-main border border-border-main'
+                  }`}
+                >
+                  {tab.name}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         {/* 3. CORE PAGE CONTENT VIEW */}
         <main className="flex-1 overflow-y-auto p-4 md:p-6 pb-24 md:pb-6 relative bg-background">
           <AnimatePresence mode="wait">
@@ -287,7 +318,7 @@ export default function Shell({ activeTab, setActiveTab, children }: ShellProps)
           {mobileNavItems.map((item) => {
             const Icon = item.icon;
             const isSelected = item.id === 'stk'
-              ? (activeTab === 'stk' || activeTab === 'b2c' || activeTab === 'reversals' || activeTab === 'balance' || activeTab === 'settlement')
+              ? (activeTab === 'stk' || activeTab === 'b2c' || activeTab === 'reversals' || activeTab === 'balance' || activeTab === 'settlement' || activeTab === 'notifications')
               : activeTab === item.id;
 
             return (

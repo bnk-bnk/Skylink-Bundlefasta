@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
 import { createTransaction } from '@/lib/repositories/transactions';
 import { logSystemAudit } from '@/lib/repositories/audit';
+import { triggerSmsNotification } from '@/lib/sms/send-sms';
 
 export async function POST(req: Request) {
   try {
@@ -63,17 +64,29 @@ export async function POST(req: Request) {
 
     // 3. Log in transaction ledger if successful
     if (ResultCode === 0) {
+      const mpesaReceipt = TransactionID || `B2B_${ConversationID.slice(-6)}`;
+
       // Create unified outgoing transaction record
       await createTransaction({
         direction: 'OUT',
         transaction_type: 'B2B',
         phone_number: existingReq.destination_shortcode, // B2B stores shortcode as destination
         amount: Number(existingReq.amount),
-        mpesa_receipt: TransactionID || `B2B_${ConversationID.slice(-6)}`,
+        mpesa_receipt: mpesaReceipt,
         status: 'SUCCESS',
         account_reference: existingReq.account_reference,
         description: existingReq.remarks || `B2B Settlement to ${existingReq.destination_shortcode}`,
         raw_payload: payload,
+      });
+
+      // Trigger SMS alerts in background (side-effect)
+      triggerSmsNotification({
+        direction: 'OUT',
+        transaction_type: 'B2B',
+        amount: Number(existingReq.amount),
+        account_reference: existingReq.account_reference,
+        phone_number: existingReq.destination_shortcode,
+        mpesa_receipt: mpesaReceipt
       });
 
       await logSystemAudit('B2B_CALLBACK_SUCCESS', {
