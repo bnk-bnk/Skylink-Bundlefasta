@@ -22,7 +22,8 @@ import {
   Plus,
   Settings,
   Layers,
-  Mail
+  Mail,
+  Server
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 
@@ -114,9 +115,10 @@ export default function Shell({ activeTab, setActiveTab, children }: ShellProps)
     { id: 'b2c', name: 'B2C Payout', icon: ArrowDownLeft },
     { id: 'reversals', name: 'Reversals', icon: Scale },
     { id: 'settlement', name: 'Settlement', icon: Layers },
+    { id: 'services', name: 'Services', icon: Server },
     { id: 'analytics', name: 'Analytics', icon: TrendingUp },
     { id: 'audit', name: 'Audit Logs', icon: History },
-    { id: 'notifications', name: 'SMS Logs', icon: Mail },
+    { id: 'notifications', name: 'Notification Logs', icon: Mail },
     { id: 'settings', name: 'Settings', icon: Settings },
   ];
 
@@ -125,7 +127,7 @@ export default function Shell({ activeTab, setActiveTab, children }: ShellProps)
     { id: 'dashboard', name: 'Dashboard', icon: LayoutDashboard },
     { id: 'transactions', name: 'Transactions', icon: Receipt },
     { id: 'stk', name: 'Operations', icon: CreditCard }, 
-    { id: 'analytics', name: 'Analytics', icon: TrendingUp },
+    { id: 'services', name: 'Services', icon: Server },
     { id: 'settings', name: 'Settings', icon: Settings },
   ];
 

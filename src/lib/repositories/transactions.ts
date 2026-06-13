@@ -253,46 +253,51 @@ export async function getDashboardStats() {
   const balance = balanceData?.balance || 0;
   const lastRefresh = balanceData?.fetched_at || null;
 
-  // Calculate boundaries for "Today" in UTC+3 (or user's timezone, let's use current calendar date)
+  // Calculate boundaries for "Today" in UTC+3 (or local calendar date)
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const todayISO = today.toISOString();
 
-  // Sum Incoming Today (direction = 'IN', status = 'SUCCESS', created_at >= today)
-  const { data: incomingData, error: incError } = await supabase
+  // Fetch all transactions since today in a single query
+  const { data: todayTxs, error: txError } = await supabase
     .from('transactions')
-    .select('amount')
-    .eq('direction', 'IN')
-    .eq('status', 'SUCCESS')
+    .select('amount, direction, source_system, status, transaction_type')
     .gte('created_at', todayISO);
 
-  const incomingToday = (incomingData || []).reduce((sum: number, tx: any) => sum + Number(tx.amount), 0);
+  if (txError) {
+    console.error('Failed to fetch today transactions for dashboard:', txError);
+  }
 
-  // Sum Outgoing Today (direction = 'OUT', status = 'SUCCESS', created_at >= today)
-  const { data: outgoingData } = await supabase
-    .from('transactions')
-    .select('amount')
-    .eq('direction', 'OUT')
-    .eq('status', 'SUCCESS')
-    .gte('created_at', todayISO);
+  const txList = todayTxs || [];
 
-  const outgoingToday = (outgoingData || []).reduce((sum: number, tx: any) => sum + Number(tx.amount), 0);
+  const incomingToday = txList
+    .filter((tx: any) => tx.direction === 'IN' && tx.status === 'SUCCESS')
+    .reduce((sum: number, tx: any) => sum + Number(tx.amount), 0);
+
+  const outgoingToday = txList
+    .filter((tx: any) => tx.direction === 'OUT' && tx.status === 'SUCCESS')
+    .reduce((sum: number, tx: any) => sum + Number(tx.amount), 0);
 
   const netFlow = incomingToday - outgoingToday;
 
-  // STKs today
-  const { count: stksCount } = await supabase
-    .from('transactions')
-    .select('*', { count: 'exact', head: true })
-    .eq('transaction_type', 'STK')
-    .gte('created_at', todayISO);
+  const stksToday = txList.filter((tx: any) => tx.transaction_type === 'STK').length;
+  const reversalsToday = txList.filter((tx: any) => tx.transaction_type === 'REVERSAL').length;
 
-  // Reversals today
-  const { count: reversalsCount } = await supabase
-    .from('transactions')
-    .select('*', { count: 'exact', head: true })
-    .eq('transaction_type', 'REVERSAL')
-    .gte('created_at', todayISO);
+  const pesatrixInToday = txList
+    .filter((tx: any) => tx.source_system === 'pesatrix' && tx.direction === 'IN' && tx.status === 'SUCCESS')
+    .reduce((sum: number, tx: any) => sum + Number(tx.amount), 0);
+
+  const pesatrixOutToday = txList
+    .filter((tx: any) => tx.source_system === 'pesatrix' && tx.direction === 'OUT' && tx.status === 'SUCCESS')
+    .reduce((sum: number, tx: any) => sum + Number(tx.amount), 0);
+
+  const bingwazoneInToday = txList
+    .filter((tx: any) => tx.source_system === 'bingwazone' && tx.direction === 'IN' && tx.status === 'SUCCESS')
+    .reduce((sum: number, tx: any) => sum + Number(tx.amount), 0);
+
+  const bingwazoneOutToday = txList
+    .filter((tx: any) => tx.source_system === 'bingwazone' && tx.direction === 'OUT' && tx.status === 'SUCCESS')
+    .reduce((sum: number, tx: any) => sum + Number(tx.amount), 0);
 
   return {
     balance,
@@ -300,7 +305,12 @@ export async function getDashboardStats() {
     incomingToday,
     outgoingToday,
     netFlow,
-    stksToday: stksCount || 0,
-    reversalsToday: reversalsCount || 0,
+    stksToday,
+    reversalsToday,
+    pesatrixInToday,
+    pesatrixOutToday,
+    bingwazoneInToday,
+    bingwazoneOutToday
   };
 }
+

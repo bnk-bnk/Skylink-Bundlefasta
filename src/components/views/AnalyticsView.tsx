@@ -1,7 +1,20 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { TrendingUp, BarChart3, PieChart as PieIcon, ArrowUpRight, ArrowDownLeft, Calendar, Filter, RefreshCw, Layers, Award, ShieldAlert, Sparkles } from 'lucide-react';
+import {
+  TrendingUp,
+  PieChart as PieIcon,
+  Calendar,
+  Filter,
+  RefreshCw,
+  Search,
+  CreditCard,
+  Layers,
+  Award,
+  ShieldAlert,
+  Sparkles,
+  BarChart3
+} from 'lucide-react';
 import { getAnalyticsTransactionsAction } from '@/app/actions';
 import {
   ResponsiveContainer,
@@ -16,9 +29,7 @@ import {
   Legend,
   PieChart,
   Pie,
-  Cell,
-  LineChart,
-  Line
+  Cell
 } from 'recharts';
 import { getReadableLabel } from '@/lib/utils/labels';
 
@@ -29,12 +40,19 @@ export default function AnalyticsView() {
   const [dateRange, setDateRange] = useState<'today' | '7days' | '30days' | 'custom'>('7days');
   const [customStart, setCustomStart] = useState<string>('');
   const [customEnd, setCustomEnd] = useState<string>('');
+  
   const [selectedSource, setSelectedSource] = useState<string>('');
   const [selectedModule, setSelectedModule] = useState<string>('');
-  const [selectedStatus, setSelectedStatus] = useState<string>('SUCCESS'); // Default to successful transactions only
+  const [selectedStatus, setSelectedStatus] = useState<string>('SUCCESS');
+  const [selectedDirection, setSelectedDirection] = useState<string>('');
+  const [selectedType, setSelectedType] = useState<string>('');
+  const [selectedReconciliationStatus, setSelectedReconciliationStatus] = useState<string>('');
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [availableModules, setAvailableModules] = useState<string[]>([]);
 
-  // Computed Global KPIs
   const [globalKpis, setGlobalKpis] = useState({
+    totalVolume: 0,
+    totalVolumeDelta: 0,
     incomingVolume: 0,
     incomingVolumeDelta: 0,
     outgoingVolume: 0,
@@ -43,21 +61,9 @@ export default function AnalyticsView() {
     netFlowDelta: 0,
     txCount: 0,
     txCountDelta: 0,
-    avgTxValue: 0,
-    avgTxValueDelta: 0,
-    incomingCount: 0,
-    outgoingCount: 0,
     reconciliationConflicts: 0
   });
 
-  // Source-specific stats
-  const [sourceStats, setSourceStats] = useState<Record<string, any>>({});
-  
-  // BingwaZone module stats
-  const [bzModuleStats, setBzModuleStats] = useState<any[]>([]);
-  const [bzWithdrawals, setBzWithdrawals] = useState({ amount: 0, count: 0 });
-
-  // Pesatrix specific stats
   const [pesatrixStats, setPesatrixStats] = useState({
     activationRevenue: 0,
     activationCount: 0,
@@ -68,17 +74,14 @@ export default function AnalyticsView() {
     withdrawalRatio: 0
   });
 
-  // Top Agents
-  const [topAgents, setTopAgents] = useState<any[]>([]);
-
-  // Charts
+  const [moduleStats, setModuleStats] = useState<any[]>([]);
+  const [sourceStats, setSourceStats] = useState<Record<string, any>>({});
   const [charts, setCharts] = useState<any>({
     timeSeries: [],
     sourceRevenue: [],
-    bzModules: [],
+    moduleShare: [],
     paymentTypes: [],
-    serviceSources: [],
-    reconDistribution: []
+    reconciliationDist: []
   });
 
   const loadAnalytics = async () => {
@@ -90,7 +93,6 @@ export default function AnalyticsView() {
       let prevStart: Date;
       let prevEnd: Date;
 
-      // 1. Resolve date intervals
       if (dateRange === 'today') {
         currentStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
         prevStart = new Date(currentStart.getTime() - 24 * 3600 * 1000);
@@ -119,178 +121,88 @@ export default function AnalyticsView() {
         prevEnd = currentStart;
       }
 
-      // Fetch all transactions covering current & previous period
       const rawTxs = await getAnalyticsTransactionsAction({
         dateStart: prevStart.toISOString(),
         dateEnd: currentEnd.toISOString()
       });
 
-      // Helper function to calculate stats for a period
+      // Extract unique modules dynamically from all fetched transactions
+      const uniqueModules = Array.from(new Set(rawTxs.map((t: any) => t.module).filter(Boolean))) as string[];
+      setAvailableModules(uniqueModules);
+
+      const applyFilters = (txs: any[]) => {
+        let filtered = txs;
+        if (selectedStatus) filtered = filtered.filter(t => t.status === selectedStatus);
+        if (selectedSource) filtered = filtered.filter(t => t.source_system === selectedSource);
+        if (selectedModule) filtered = filtered.filter(t => t.module === selectedModule);
+        if (selectedDirection) filtered = filtered.filter(t => t.direction === selectedDirection);
+        if (selectedType) filtered = filtered.filter(t => t.transaction_type === selectedType);
+        if (selectedReconciliationStatus) filtered = filtered.filter(t => t.reconciliation_status === selectedReconciliationStatus);
+        if (searchQuery) {
+          const q = searchQuery.toLowerCase().trim();
+          filtered = filtered.filter(t => 
+            (t.receipt && t.receipt.toLowerCase().includes(q)) ||
+            (t.mpesa_receipt && t.mpesa_receipt.toLowerCase().includes(q)) ||
+            (t.phone_number && t.phone_number.toLowerCase().includes(q)) ||
+            (t.account_reference && t.account_reference.toLowerCase().includes(q))
+          );
+        }
+        return filtered;
+      };
+
       const computePeriodStats = (txs: any[]) => {
-        // Apply status filter if selected
-        let filtered = selectedStatus ? txs.filter(t => t.status === selectedStatus) : txs;
-        
-        // Exclude conflict/duplicate evidence events from financial totals where required
-        // Note: we exclude reconciliation_status = 'conflict' duplicates to prevent double counting
-        filtered = filtered.filter(t => t.reconciliation_status !== 'conflict');
-
-        let incomingVolume = 0;
-        let outgoingVolume = 0;
-        let txCount = 0;
-        let incomingCount = 0;
-        let outgoingCount = 0;
-
-        filtered.forEach(t => {
+        const filtered = applyFilters(txs);
+        const financialFiltered = filtered.filter(t => t.reconciliation_status !== 'conflict');
+        let incomingVolume = 0, outgoingVolume = 0;
+        financialFiltered.forEach(t => {
           const amt = Number(t.amount);
-          txCount++;
-          if (t.direction === 'IN') {
-            incomingVolume += amt;
-            incomingCount++;
-          } else {
-            outgoingVolume += amt;
-            outgoingCount++;
-          }
+          if (t.direction === 'IN') incomingVolume += amt;
+          else outgoingVolume += amt;
         });
-
-        const netFlow = incomingVolume - outgoingVolume;
-        const avgTxValue = txCount > 0 ? (incomingVolume + outgoingVolume) / txCount : 0;
-
         return {
+          totalVolume: incomingVolume + outgoingVolume,
           incomingVolume,
           outgoingVolume,
-          netFlow,
-          txCount,
-          incomingCount,
-          outgoingCount,
-          avgTxValue,
-          txList: filtered
+          netFlow: incomingVolume - outgoingVolume,
+          txCount: filtered.length,
+          txList: filtered,
+          financialList: financialFiltered
         };
       };
 
-      // 2. Separate datasets
-      const currentPeriodTxs = rawTxs.filter((t: any) => {
+      const currentPeriodRaw = rawTxs.filter((t: any) => {
         const time = new Date(t.occurred_at || t.created_at).getTime();
         return time >= currentStart.getTime() && time <= currentEnd.getTime();
       });
-
-      const prevPeriodTxs = rawTxs.filter((t: any) => {
+      const prevPeriodRaw = rawTxs.filter((t: any) => {
         const time = new Date(t.occurred_at || t.created_at).getTime();
         return time >= prevStart.getTime() && time < currentStart.getTime();
       });
 
-      // Calculate global metrics
-      const curMetrics = computePeriodStats(currentPeriodTxs);
-      const prevMetrics = computePeriodStats(prevPeriodTxs);
-
-      // Deltas
-      const incomingVolumeDelta = prevMetrics.incomingVolume > 0 ? ((curMetrics.incomingVolume - prevMetrics.incomingVolume) / prevMetrics.incomingVolume) * 100 : 0;
-      const outgoingVolumeDelta = prevMetrics.outgoingVolume > 0 ? ((curMetrics.outgoingVolume - prevMetrics.outgoingVolume) / prevMetrics.outgoingVolume) * 100 : 0;
-      const netFlowDelta = prevMetrics.netFlow > 0 ? ((curMetrics.netFlow - prevMetrics.netFlow) / prevMetrics.netFlow) * 100 : 0;
-      const txCountDelta = prevMetrics.txCount > 0 ? ((curMetrics.txCount - prevMetrics.txCount) / prevMetrics.txCount) * 100 : 0;
-      const avgTxValueDelta = prevMetrics.avgTxValue > 0 ? ((curMetrics.avgTxValue - prevMetrics.avgTxValue) / prevMetrics.avgTxValue) * 100 : 0;
-
-      // Count reconciliation conflicts in current period (independent of status)
-      const reconciliationConflicts = currentPeriodTxs.filter((t: any) => t.reconciliation_status === 'conflict').length;
+      const curMetrics = computePeriodStats(currentPeriodRaw);
+      const prevMetrics = computePeriodStats(prevPeriodRaw);
 
       setGlobalKpis({
+        totalVolume: curMetrics.totalVolume,
+        totalVolumeDelta: prevMetrics.totalVolume > 0 ? ((curMetrics.totalVolume - prevMetrics.totalVolume) / prevMetrics.totalVolume) * 100 : 0,
         incomingVolume: curMetrics.incomingVolume,
-        incomingVolumeDelta,
+        incomingVolumeDelta: prevMetrics.incomingVolume > 0 ? ((curMetrics.incomingVolume - prevMetrics.incomingVolume) / prevMetrics.incomingVolume) * 100 : 0,
         outgoingVolume: curMetrics.outgoingVolume,
-        outgoingVolumeDelta,
+        outgoingVolumeDelta: prevMetrics.outgoingVolume > 0 ? ((curMetrics.outgoingVolume - prevMetrics.outgoingVolume) / prevMetrics.outgoingVolume) * 100 : 0,
         netFlow: curMetrics.netFlow,
-        netFlowDelta,
+        netFlowDelta: prevMetrics.netFlow > 0 ? ((curMetrics.netFlow - prevMetrics.netFlow) / prevMetrics.netFlow) * 100 : 0,
         txCount: curMetrics.txCount,
-        txCountDelta,
-        avgTxValue: curMetrics.avgTxValue,
-        avgTxValueDelta,
-        incomingCount: curMetrics.incomingCount,
-        outgoingCount: curMetrics.outgoingCount,
-        reconciliationConflicts
+        txCountDelta: prevMetrics.txCount > 0 ? ((curMetrics.txCount - prevMetrics.txCount) / prevMetrics.txCount) * 100 : 0,
+        reconciliationConflicts: currentPeriodRaw.filter((t: any) => t.reconciliation_status === 'conflict').length
       });
 
-      // 3. Source system comparisons (BingwaZone vs Pesatrix vs Unknown)
-      const sourcesList = ['bingwazone', 'pesatrix', 'unknown'];
-      const sourcesData: Record<string, any> = {};
-
-      sourcesList.forEach(src => {
-        const curSrc = curMetrics.txList.filter(t => t.source_system === src);
-        const prevSrc = prevMetrics.txList.filter(t => t.source_system === src);
-
-        let curIn = 0, curOut = 0, curCnt = 0;
-        curSrc.forEach(t => {
-          curCnt++;
-          if (t.direction === 'IN') curIn += Number(t.amount);
-          else curOut += Number(t.amount);
-        });
-
-        let prevIn = 0;
-        prevSrc.forEach(t => {
-          if (t.direction === 'IN') prevIn += Number(t.amount);
-        });
-
-        const pct = curMetrics.incomingVolume > 0 ? (curIn / curMetrics.incomingVolume) * 100 : 0;
-        const change = prevIn > 0 ? ((curIn - prevIn) / prevIn) * 100 : 0;
-
-        sourcesData[src] = {
-          incoming: curIn,
-          outgoing: curOut,
-          net: curIn - curOut,
-          count: curCnt,
-          percentage: pct,
-          delta: change
-        };
-      });
-      setSourceStats(sourcesData);
-
-      // 4. BingwaZone Modules Dissection
-      const curBz = curMetrics.txList.filter(t => t.source_system === 'bingwazone');
-      const prevBz = prevMetrics.txList.filter(t => t.source_system === 'bingwazone');
-
-      const bzModules = ['mini_site', 'whatsapp_bot', 'whatsapp_agents', 'whatsapp_auto_post', 'requested_poster', 'bundle'];
-      const bzModsList = bzModules.map(mod => {
-        const curMod = curBz.filter(t => t.module === mod && t.direction === 'IN');
-        const prevMod = prevBz.filter(t => t.module === mod && t.direction === 'IN');
-
-        const curIn = curMod.reduce((sum, t) => sum + Number(t.amount), 0);
-        const prevIn = prevMod.reduce((sum, t) => sum + Number(t.amount), 0);
-
-        const curCount = curMod.length;
-        const avgVal = curCount > 0 ? curIn / curCount : 0;
-        
-        // Revenue total for BingwaZone (excluding wallet payouts)
-        const totalBzRev = curBz.filter(t => t.direction === 'IN').reduce((sum, t) => sum + Number(t.amount), 0);
-        const percentage = totalBzRev > 0 ? (curIn / totalBzRev) * 100 : 0;
-        const change = prevIn > 0 ? ((curIn - prevIn) / prevIn) * 100 : 0;
-
-        return {
-          id: mod,
-          name: getReadableLabel(mod),
-          revenue: curIn,
-          count: curCount,
-          average: avgVal,
-          percentage,
-          delta: change
-        };
-      }).sort((a, b) => b.revenue - a.revenue);
-
-      setBzModuleStats(bzModsList);
-
-      // BingwaZone Outgoing withdrawals (wallet)
-      const bzWds = curBz.filter(t => t.module === 'wallet' && t.direction === 'OUT');
-      setBzWithdrawals({
-        amount: bzWds.reduce((sum, t) => sum + Number(t.amount), 0),
-        count: bzWds.length
-      });
-
-      // 5. Pesatrix Activation vs Payouts
-      const curPt = curMetrics.txList.filter(t => t.source_system === 'pesatrix');
-      
-      const ptActivations = curPt.filter(t => t.module === 'account_activation' && t.direction === 'IN');
-      const ptWithdrawals = curPt.filter(t => t.module === 'wallet' && t.direction === 'OUT');
-
-      const ptActRev = ptActivations.reduce((sum, t) => sum + Number(t.amount), 0);
+      // Compute Pesatrix stats
+      const curPt = curMetrics.financialList.filter((t: any) => t.source_system === 'pesatrix');
+      const ptActivations = curPt.filter((t: any) => t.direction === 'IN' && (t.module === 'account_activation' || t.module === 'activation' || t.transaction_type === 'activation'));
+      const ptWithdrawals = curPt.filter((t: any) => t.direction === 'OUT' && (t.module === 'wallet' || t.module === 'withdrawal' || t.transaction_type === 'withdrawal'));
+      const ptActRev = ptActivations.reduce((sum: number, t: any) => sum + Number(t.amount), 0);
       const ptActCnt = ptActivations.length;
-      const ptWdVol = ptWithdrawals.reduce((sum, t) => sum + Number(t.amount), 0);
+      const ptWdVol = ptWithdrawals.reduce((sum: number, t: any) => sum + Number(t.amount), 0);
       const ptWdCnt = ptWithdrawals.length;
 
       setPesatrixStats({
@@ -303,51 +215,48 @@ export default function AnalyticsView() {
         withdrawalRatio: ptActRev > 0 ? (ptWdVol / ptActRev) * 100 : 0
       });
 
-      // 6. Top BingwaZone Agents (By Inbound payment totals)
-      const agentMap: Record<string, { name: string; username: string; business: string; volume: number; count: number }> = {};
-      curBz.filter(t => t.direction === 'IN' && t.agent_name).forEach(t => {
-        const key = t.external_agent_id || t.agent_username || t.agent_name;
-        if (!agentMap[key]) {
-          agentMap[key] = {
-            name: t.agent_name,
-            username: t.agent_username || '',
-            business: t.agent_business_name || '',
-            volume: 0,
-            count: 0
-          };
-        }
-        agentMap[key].volume += Number(t.amount);
-        agentMap[key].count += 1;
+      const sourcesList = ['bingwazone', 'pesatrix', 'manual', 'unknown'];
+      const sourcesData: Record<string, any> = {};
+      sourcesList.forEach(src => {
+        const curSrc = curMetrics.financialList.filter((t: any) => t.source_system === src);
+        const prevSrc = prevMetrics.financialList.filter((t: any) => t.source_system === src);
+        const curIn = curSrc.filter((t: any) => t.direction === 'IN').reduce((sum: number, t: any) => sum + Number(t.amount), 0);
+        const curOut = curSrc.filter((t: any) => t.direction === 'OUT').reduce((sum: number, t: any) => sum + Number(t.amount), 0);
+        const prevIn = prevSrc.filter((t: any) => t.direction === 'IN').reduce((sum: number, t: any) => sum + Number(t.amount), 0);
+        sourcesData[src] = {
+          incoming: curIn,
+          outgoing: curOut,
+          net: curIn - curOut,
+          count: curSrc.length,
+          percentage: curMetrics.incomingVolume > 0 ? (curIn / curMetrics.incomingVolume) * 100 : 0,
+          delta: prevIn > 0 ? ((curIn - prevIn) / prevIn) * 100 : 0
+        };
       });
+      setSourceStats(sourcesData);
 
-      const topAgentsList = Object.values(agentMap)
-        .sort((a, b) => b.volume - a.volume)
-        .slice(0, 5);
-      setTopAgents(topAgentsList);
+      const moduleMap: Record<string, any> = {};
+      curMetrics.financialList.forEach((t: any) => {
+        if (t.module) {
+          const key = `${t.source_system}:${t.module}:${t.direction}`;
+          if (!moduleMap[key]) moduleMap[key] = { name: `${getReadableLabel(t.source_system)} - ${getReadableLabel(t.module)}`, volume: 0, count: 0, direction: t.direction };
+          moduleMap[key].volume += Number(t.amount);
+          moduleMap[key].count += 1;
+        }
+      });
+      setModuleStats(Object.values(moduleMap).sort((a, b) => b.volume - a.volume));
 
-      // 7. Time series grouping (respecting selected filters)
-      let chartFilteredTxs = curMetrics.txList;
-      if (selectedSource) {
-        chartFilteredTxs = chartFilteredTxs.filter(t => t.source_system === selectedSource);
-      }
-      if (selectedModule) {
-        chartFilteredTxs = chartFilteredTxs.filter(t => t.module === selectedModule);
-      }
-
-      const dailyMap: Record<string, { date: string; inflow: number; outflow: number; net: number }> = {};
+      const dailyMap: Record<string, any> = {};
       if (dateRange === 'today') {
         for (let h = 0; h < 24; h += 2) {
           const label = `${String(h).padStart(2, '0')}:00`;
           dailyMap[label] = { date: label, inflow: 0, outflow: 0, net: 0 };
         }
-        chartFilteredTxs.forEach(t => {
+        curMetrics.financialList.forEach((t: any) => {
           const hour = new Date(t.occurred_at || t.created_at).getHours();
-          const bucketHour = Math.floor(hour / 2) * 2;
-          const label = `${String(bucketHour).padStart(2, '0')}:00`;
+          const label = `${String(Math.floor(hour / 2) * 2).padStart(2, '0')}:00`;
           if (dailyMap[label]) {
-            const amt = Number(t.amount);
-            if (t.direction === 'IN') dailyMap[label].inflow += amt;
-            else dailyMap[label].outflow += amt;
+            if (t.direction === 'IN') dailyMap[label].inflow += Number(t.amount);
+            else dailyMap[label].outflow += Number(t.amount);
           }
         });
       } else {
@@ -358,303 +267,159 @@ export default function AnalyticsView() {
           const dateStr = d.toLocaleDateString('en-KE', { month: 'short', day: 'numeric' });
           dailyMap[dateStr] = { date: dateStr, inflow: 0, outflow: 0, net: 0 };
         }
-        chartFilteredTxs.forEach(t => {
+        curMetrics.financialList.forEach((t: any) => {
           const dateStr = new Date(t.occurred_at || t.created_at).toLocaleDateString('en-KE', { month: 'short', day: 'numeric' });
           if (dailyMap[dateStr]) {
-            const amt = Number(t.amount);
-            if (t.direction === 'IN') dailyMap[dateStr].inflow += amt;
-            else dailyMap[dateStr].outflow += amt;
+            if (t.direction === 'IN') dailyMap[dateStr].inflow += Number(t.amount);
+            else dailyMap[dateStr].outflow += Number(t.amount);
           }
         });
       }
 
-      // Compute nets on time series
-      const timeSeriesData = Object.values(dailyMap).map(d => ({
-        ...d,
-        net: d.inflow - d.outflow
-      }));
-
-      // Pie chart 1: Revenue by source system
-      const sourceRevenue = Object.entries(sourcesData).map(([key, value]: any) => ({
-        name: getReadableLabel(key),
-        value: value.incoming
-      })).filter(v => v.value > 0);
-
-      // Pie chart 2: BingwaZone module splits
-      const bzModulesChart = bzModsList.map(m => ({
-        name: m.name,
-        value: m.revenue
-      })).filter(v => v.value > 0);
-
-      // Bar Chart: Transactions by Payment Type
       const payTypeMap: Record<string, number> = {};
-      chartFilteredTxs.forEach(t => {
-        if (t.payment_type) {
-          payTypeMap[t.payment_type] = (payTypeMap[t.payment_type] || 0) + Number(t.amount);
-        }
+      curMetrics.financialList.forEach((t: any) => {
+        if (t.payment_type) payTypeMap[t.payment_type] = (payTypeMap[t.payment_type] || 0) + Number(t.amount);
       });
-      const paymentTypes = Object.entries(payTypeMap).map(([name, value]) => ({
-        name: getReadableLabel(name),
-        volume: value
-      })).sort((a, b) => b.volume - a.volume);
 
-      // Bar Chart: Transactions by Service Source
-      const svcMap: Record<string, number> = {};
-      chartFilteredTxs.forEach(t => {
-        if (t.service_source) {
-          svcMap[t.service_source] = (svcMap[t.service_source] || 0) + Number(t.amount);
-        }
-      });
-      const serviceSources = Object.entries(svcMap).map(([name, value]) => ({
-        name: getReadableLabel(name),
-        volume: value
-      })).sort((a, b) => b.volume - a.volume).slice(0, 8);
-
-      // Reconciliation Status Distribution
       const reconMap: Record<string, number> = { matched: 0, app_only: 0, provider_only: 0, conflict: 0 };
-      // Note: we fetch reconciliation status directly in current period transactions
-      currentPeriodTxs.forEach((t: any) => {
-        const rs = t.reconciliation_status || 'not_applicable';
-        if (reconMap[rs] !== undefined) {
-          reconMap[rs]++;
+      currentPeriodRaw.forEach((t: any) => {
+        if (t.reconciliation_status && reconMap[t.reconciliation_status] !== undefined) reconMap[t.reconciliation_status]++;
+      });
+
+      // Calculate Module Share for Pie Chart (Inflows only)
+      const moduleShareMap: Record<string, number> = {};
+      curMetrics.financialList.forEach((t: any) => {
+        if (t.module && t.direction === 'IN') {
+          moduleShareMap[t.module] = (moduleShareMap[t.module] || 0) + Number(t.amount);
         }
       });
-      const reconDistribution = Object.entries(reconMap).map(([name, value]) => ({
-        name: name.toUpperCase().replace('_', ' '),
+      const moduleShare = Object.entries(moduleShareMap).map(([name, value]) => ({
+        name: getReadableLabel(name),
         value
-      })).filter(v => v.value > 0);
+      })).sort((a, b) => b.value - a.value);
 
       setCharts({
-        timeSeries: timeSeriesData,
-        sourceRevenue: sourceRevenue.length > 0 ? sourceRevenue : [{ name: 'No Data', value: 0.1 }],
-        bzModules: bzModulesChart.length > 0 ? bzModulesChart : [{ name: 'No Data', value: 0.1 }],
-        paymentTypes,
-        serviceSources,
-        reconDistribution: reconDistribution.length > 0 ? reconDistribution : [{ name: 'N/A', value: 0.1 }]
+        timeSeries: Object.values(dailyMap).map(d => ({ ...d, net: d.inflow - d.outflow })),
+        sourceRevenue: Object.entries(sourcesData).map(([k, v]: any) => ({ name: getReadableLabel(k), volume: v.incoming })).filter(v => v.volume > 0),
+        moduleShare,
+        paymentTypes: Object.entries(payTypeMap).map(([name, volume]) => ({ name: getReadableLabel(name), volume })),
+        reconciliationDist: Object.entries(reconMap).map(([name, value]) => ({ name: name.toUpperCase().replace('_', ' '), value })).filter(v => v.value > 0)
       });
-
-    } catch (err) {
-      console.error('Failed computing analytics:', err);
-    } finally {
-      setLoading(false);
-    }
+    } catch (err) { console.error('Error:', err); } finally { setLoading(false); }
   };
 
-  useEffect(() => {
-    loadAnalytics();
-  }, [dateRange, selectedSource, selectedModule, selectedStatus]);
+  useEffect(() => { loadAnalytics(); }, [dateRange, selectedSource, selectedModule, selectedStatus, selectedDirection, selectedType, selectedReconciliationStatus]);
 
-  const formatKES = (val: number) => {
-    return new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES', maximumFractionDigits: 0 }).format(val);
-  };
-
-  const renderDelta = (delta: number) => {
-    if (delta === 0) return <span className="text-[10px] text-muted-main">0% vs prev</span>;
-    const isPositive = delta > 0;
-    return (
-      <span className={`inline-flex items-center gap-0.5 text-[10px] font-bold rounded px-1.5 py-0.5 ${
-        isPositive ? 'text-success-main bg-success-main/10' : 'text-danger bg-danger/10'
-      }`}>
-        {isPositive ? '+' : ''}{delta.toFixed(1)}% vs prev
-      </span>
-    );
-  };
+  const handleSearchSubmit = (e: React.FormEvent) => { e.preventDefault(); loadAnalytics(); };
+  const formatKES = (val: number) => new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES', maximumFractionDigits: 0 }).format(val);
+  const renderDelta = (delta: number) => (
+    <span className={`text-[10px] font-bold ${delta >= 0 ? 'text-success-main' : 'text-danger'}`}>
+      {delta > 0 ? '+' : ''}{delta.toFixed(1)}%
+    </span>
+  );
 
   return (
     <div className="space-y-6 font-outfit antialiased">
-      
-      {/* Filters Toolbar */}
-      <div className="bg-panel border border-border-main rounded-xl p-4 shadow-sm flex flex-col md:flex-row gap-4 items-stretch md:items-center justify-between">
-        
-        {/* Date Tabs Toggle */}
-        <div className="flex bg-background border border-border-main p-1 rounded-lg self-start">
-          {[
-            { id: 'today', label: 'Today' },
-            { id: '7days', label: '7 Days' },
-            { id: '30days', label: '30 Days' },
-            { id: 'custom', label: 'Custom' }
-          ].map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setDateRange(tab.id as any)}
-              className={`text-xs px-3 py-1.5 rounded-md font-semibold transition-colors cursor-pointer ${
-                dateRange === tab.id
-                  ? 'bg-panel text-accent border border-border-main shadow-sm'
-                  : 'text-muted-main hover:text-text-main'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
+      <div className="bg-panel border border-border-main rounded-2xl p-4 md:p-5 shadow-sm space-y-4">
+        <div className="flex flex-col lg:flex-row gap-4 items-stretch lg:items-center justify-between">
+          <div className="flex bg-background border border-border-main p-1 rounded-xl self-start shadow-sm">
+            {[ { id: 'today', label: 'Today' }, { id: '7days', label: '7 Days' }, { id: '30days', label: '30 Days' }, { id: 'custom', label: 'Custom' } ].map(tab => (
+              <button key={tab.id} onClick={() => setDateRange(tab.id as any)} className={`text-xs px-3.5 py-2 rounded-lg font-bold transition-all ${dateRange === tab.id ? 'bg-panel text-accent border border-border-main shadow-sm' : 'text-muted-main hover:text-text-main'}`}>
+                {tab.label}
+              </button>
+            ))}
+          </div>
+          <form onSubmit={handleSearchSubmit} className="flex-1 max-w-md flex gap-2">
+            <div className="flex-1 bg-background border border-border-main rounded-xl px-3 py-2 flex items-center gap-2">
+              <Search size={14} className="text-muted-main" />
+              <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search phone, receipt, account reference..." className="bg-transparent border-none text-xs text-text-main focus:outline-none w-full font-medium" />
+            </div>
+            <button type="submit" className="bg-accent hover:opacity-90 text-white rounded-xl px-3 py-2 text-xs font-semibold cursor-pointer">Search</button>
+          </form>
         </div>
 
-        {/* Custom Range & Filters */}
-        <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
-          {dateRange === 'custom' && (
-            <div className="flex items-center gap-1.5 bg-background border border-border-main rounded-lg px-2.5 py-1">
-              <Calendar size={14} className="text-muted-main" />
-              <input
-                type="date"
-                value={customStart}
-                onChange={e => setCustomStart(e.target.value)}
-                className="bg-transparent border-none text-xs text-text-main focus:outline-none py-1"
-              />
-              <span className="text-xs text-muted-main font-semibold">to</span>
-              <input
-                type="date"
-                value={customEnd}
-                onChange={e => setCustomEnd(e.target.value)}
-                className="bg-transparent border-none text-xs text-text-main focus:outline-none py-1"
-              />
-              <button 
-                onClick={loadAnalytics}
-                className="p-1 border border-border-main hover:bg-panel rounded text-muted-main cursor-pointer"
-              >
-                <RefreshCw size={12} />
-              </button>
-            </div>
-          )}
-
-          {/* Source Filter */}
-          <div className="flex items-center gap-2 bg-background border border-border-main rounded-lg px-2.5 py-1.5">
-            <Filter size={14} className="text-muted-main" />
-            <select
-              value={selectedSource}
-              onChange={e => {
-                setSelectedSource(e.target.value);
-                setSelectedModule(''); // reset module filter
-              }}
-              className="bg-transparent border-none text-xs text-text-main focus:outline-none font-semibold cursor-pointer"
-            >
-              <option value="">All Source Systems</option>
-              <option value="bingwazone">BingwaZone</option>
-              <option value="pesatrix">Pesatrix</option>
-              <option value="unknown">Unknown</option>
-            </select>
-          </div>
-
-          {/* Module Filter (Contextual to Source) */}
-          {selectedSource === 'bingwazone' && (
-            <div className="flex items-center gap-2 bg-background border border-border-main rounded-lg px-2.5 py-1.5">
-              <Filter size={14} className="text-muted-main" />
-              <select
-                value={selectedModule}
-                onChange={e => setSelectedModule(e.target.value)}
-                className="bg-transparent border-none text-xs text-text-main focus:outline-none font-semibold cursor-pointer"
-              >
-                <option value="">All Modules</option>
-                <option value="mini_site">Mini Sites</option>
-                <option value="whatsapp_bot">WhatsApp Bot</option>
-                <option value="whatsapp_agents">WhatsApp Agents</option>
-                <option value="whatsapp_auto_post">WhatsApp Auto Post</option>
-                <option value="requested_poster">Requested Posters</option>
-                <option value="bundle">Bundles</option>
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+          {[
+            { label: 'All Services', val: selectedSource, set: (v: string) => { setSelectedSource(v); setSelectedModule(''); }, opts: ['bingwazone', 'pesatrix', 'manual', 'unknown'] },
+            { label: 'All Modules', val: selectedModule, set: setSelectedModule, opts: availableModules },
+            { label: 'All Flow Directions', val: selectedDirection, set: setSelectedDirection, opts: ['IN', 'OUT'] },
+            { label: 'All Tx Types', val: selectedType, set: setSelectedType, opts: ['C2B', 'STK', 'B2C', 'REVERSAL', 'activation', 'withdrawal'] },
+            { label: 'Reconciliation', val: selectedReconciliationStatus, set: setSelectedReconciliationStatus, opts: ['matched', 'conflict', 'app_only', 'provider_only'] },
+            { label: 'All Statuses', val: selectedStatus, set: setSelectedStatus, opts: ['SUCCESS', 'PENDING', 'FAILED'] }
+          ].map((f, i) => (
+            <div key={i} className="flex items-center gap-2 bg-background border border-border-main rounded-xl px-3 py-2">
+              <Filter size={12} className="text-muted-main" />
+              <select value={f.val} onChange={e => f.set(e.target.value)} className="bg-transparent border-none text-xs text-text-main focus:outline-none font-bold w-full cursor-pointer">
+                <option value="">{f.label}</option>
+                {f.opts.map(o => <option key={o} value={o}>{getReadableLabel(o)}</option>)}
               </select>
             </div>
-          )}
-
-          {/* Status Filter */}
-          <div className="flex items-center gap-2 bg-background border border-border-main rounded-lg px-2.5 py-1.5">
-            <Filter size={14} className="text-muted-main" />
-            <select
-              value={selectedStatus}
-              onChange={e => setSelectedStatus(e.target.value)}
-              className="bg-transparent border-none text-xs text-text-main focus:outline-none font-semibold cursor-pointer"
-            >
-              <option value="SUCCESS">Successful Only</option>
-              <option value="">All Statuses</option>
-              <option value="PENDING">Pending Only</option>
-              <option value="FAILED">Failed Only</option>
-            </select>
-          </div>
+          ))}
         </div>
-
       </div>
 
       {loading ? (
         <div className="space-y-6 animate-pulse">
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            {[...Array(4)].map((_, i) => (
-              <div key={i} className="bg-panel border border-border-main rounded-xl p-5 h-24" />
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="bg-panel border border-border-main rounded-xl p-5 h-28" />
             ))}
           </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="bg-panel border border-border-main rounded-xl p-5 h-80" />
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="bg-panel border border-border-main rounded-xl p-5 h-80 lg:col-span-2" />
             <div className="bg-panel border border-border-main rounded-xl p-5 h-80" />
           </div>
         </div>
       ) : (
         <>
           {/* 1. Global KPI Metrics Row */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            {[
-              {
-                label: 'Total Incoming Volume',
-                value: formatKES(globalKpis.incomingVolume),
-                delta: globalKpis.incomingVolumeDelta,
-                color: 'text-success-main'
-              },
-              {
-                label: 'Total Outgoing Volume',
-                value: formatKES(globalKpis.outgoingVolume),
-                delta: globalKpis.outgoingVolumeDelta,
-                color: 'text-danger'
-              },
-              {
-                label: 'Net Flow (Cashflow)',
-                value: formatKES(globalKpis.netFlow),
-                delta: globalKpis.netFlowDelta,
-                color: globalKpis.netFlow >= 0 ? 'text-success-main' : 'text-danger'
-              },
-              {
-                label: 'Total Transactions count',
-                value: globalKpis.txCount.toLocaleString(),
-                delta: globalKpis.txCountDelta,
-                color: 'text-text-main'
-              }
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+            {[ 
+              { label: 'Total Volume', v: globalKpis.totalVolume, d: globalKpis.totalVolumeDelta, c: 'text-accent' }, 
+              { label: 'Total Inflow', v: globalKpis.incomingVolume, d: globalKpis.incomingVolumeDelta, c: 'text-success-main' }, 
+              { label: 'Total Outflow', v: globalKpis.outgoingVolume, d: globalKpis.outgoingVolumeDelta, c: 'text-danger' }, 
+              { label: 'Net Flow', v: globalKpis.netFlow, d: globalKpis.netFlowDelta, c: globalKpis.netFlow >= 0 ? 'text-success-main' : 'text-danger' }, 
+              { label: 'Recon Conflicts', v: globalKpis.reconciliationConflicts, d: 0, c: globalKpis.reconciliationConflicts > 0 ? 'text-danger animate-pulse' : 'text-muted-main' } 
             ].map((k, i) => (
-              <div key={i} className="bg-panel border border-border-main rounded-xl p-5 shadow-sm flex flex-col justify-between h-28">
-                <span className="text-[10px] font-semibold text-muted-main uppercase tracking-wider block">
-                  {k.label}
-                </span>
-                <div className="flex items-baseline justify-between mt-2 flex-wrap gap-2">
-                  <h3 className={`text-xl md:text-2xl font-bold tracking-tight font-mono ${k.color}`}>
-                    {k.value}
+              <div key={i} className="bg-panel border border-border-main rounded-2xl p-5 shadow-sm h-28 flex flex-col justify-between">
+                <span className="text-[10px] font-bold text-muted-main uppercase tracking-wider block">{k.label}</span>
+                <div className="flex items-baseline justify-between mt-2">
+                  <h3 className={`text-lg font-bold font-mono tracking-tight ${k.c}`}>
+                    {typeof k.v === 'number' ? (k.label.includes('Conflicts') ? k.v : formatKES(k.v)) : k.v}
                   </h3>
-                  {renderDelta(k.delta)}
+                  {k.d !== 0 && renderDelta(k.d)}
                 </div>
               </div>
             ))}
           </div>
 
-          {/* 2. Visual Charts Row (Timeseries & Source Revenue share) */}
+          {/* 2. Visual Charts Row (Timeseries Area + Inflow Module share Pie) */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Time series area chart */}
-            <div className="bg-panel border border-border-main rounded-xl p-5 shadow-sm flex flex-col justify-between lg:col-span-2">
+            <div className="bg-panel border border-border-main rounded-2xl p-5 lg:col-span-2 shadow-sm flex flex-col justify-between">
               <div className="mb-4">
-                <h3 className="font-bold text-sm flex items-center gap-1.5 text-text-main">
+                <h3 className="font-bold text-sm text-text-main flex items-center gap-1.5">
                   <TrendingUp size={16} className="text-accent" />
-                  Inflow vs Outflow Cash Trend
+                  Cash Trend Analysis
                 </h3>
-                <p className="text-xs text-muted-main">Comparison of incoming payments vs outgoing payouts</p>
+                <p className="text-xs text-muted-main">Inflow vs outflow daily processed values over the range</p>
               </div>
-              <div className="h-64 w-full text-xs">
+              <div className="h-64 text-xs">
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={charts.timeSeries} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                     <defs>
                       <linearGradient id="colorIn" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#0DB02B" stopOpacity={0.2}/>
+                        <stop offset="5%" stopColor="#0DB02B" stopOpacity={0.15}/>
                         <stop offset="95%" stopColor="#0DB02B" stopOpacity={0}/>
                       </linearGradient>
                       <linearGradient id="colorOut" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#FF3B30" stopOpacity={0.2}/>
+                        <stop offset="5%" stopColor="#FF3B30" stopOpacity={0.15}/>
                         <stop offset="95%" stopColor="#FF3B30" stopOpacity={0}/>
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border-main)" />
                     <XAxis dataKey="date" stroke="var(--muted-main)" />
                     <YAxis stroke="var(--muted-main)" />
-                    <Tooltip contentStyle={{ backgroundColor: 'var(--panel)', borderColor: 'var(--border-main)', color: 'var(--text-main)' }} />
+                    <Tooltip contentStyle={{ backgroundColor: 'var(--panel)', borderColor: 'var(--border-main)', color: 'var(--text-main)', borderRadius: '12px' }} formatter={(v) => [formatKES(v as number), '']} />
                     <Legend wrapperStyle={{ fontSize: 10, paddingTop: 10 }} />
                     <Area type="monotone" dataKey="inflow" stroke="#0DB02B" fillOpacity={1} fill="url(#colorIn)" name="Inflow (IN)" strokeWidth={2} />
                     <Area type="monotone" dataKey="outflow" stroke="#FF3B30" fillOpacity={1} fill="url(#colorOut)" name="Outflow (OUT)" strokeWidth={2} />
@@ -663,40 +428,44 @@ export default function AnalyticsView() {
               </div>
             </div>
 
-            {/* Revenue split pie chart */}
-            <div className="bg-panel border border-border-main rounded-xl p-5 shadow-sm flex flex-col justify-between">
+            {/* Module Share Pie Chart */}
+            <div className="bg-panel border border-border-main rounded-2xl p-5 shadow-sm flex flex-col justify-between">
               <div className="mb-2">
                 <h3 className="font-bold text-sm flex items-center gap-1.5 text-text-main">
                   <PieIcon size={16} className="text-success-main" />
-                  Revenue by Source System
+                  Inflow Share by Module
                 </h3>
-                <p className="text-xs text-muted-main">Dissecting revenue shares from C2B/STK</p>
+                <p className="text-xs text-muted-main">Attributed inflow revenue shares from business modules</p>
               </div>
               <div className="h-56 w-full flex items-center justify-center text-xs">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={charts.sourceRevenue}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={55}
-                      outerRadius={75}
-                      paddingAngle={4}
-                      dataKey="value"
-                      nameKey="name"
-                    >
-                      {charts.sourceRevenue.map((entry: any, index: number) => (
-                        <Cell key={`cell-src-${index}`} fill={COLORS[index % COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip contentStyle={{ backgroundColor: 'var(--panel)', borderColor: 'var(--border-main)', color: 'var(--text-main)' }} />
-                  </PieChart>
-                </ResponsiveContainer>
+                {charts.moduleShare.length === 0 ? (
+                  <span className="text-xs text-muted-main italic py-10">No matching module inflow data.</span>
+                ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={charts.moduleShare}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={55}
+                        outerRadius={75}
+                        paddingAngle={4}
+                        dataKey="value"
+                        nameKey="name"
+                      >
+                        {charts.moduleShare.map((entry: any, index: number) => (
+                          <Cell key={`cell-mod-${index}`} fill={COLORS[index % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip contentStyle={{ backgroundColor: 'var(--panel)', borderColor: 'var(--border-main)', color: 'var(--text-main)', borderRadius: '12px' }} formatter={(v) => [formatKES(v as number), 'Volume']} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                )}
               </div>
               <div className="grid grid-cols-3 gap-1 text-[9px] text-muted-main font-semibold border-t border-border-main pt-3 text-center">
-                {charts.sourceRevenue.map((entry: any, index: number) => (
+                {charts.moduleShare.slice(0, 3).map((entry: any, index: number) => (
                   <div key={entry.name} className="flex items-center gap-1 justify-center truncate">
-                    <div className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: COLORS[index % COLORS.length] }} />
+                    <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: COLORS[index % COLORS.length] }} />
                     <span className="truncate">{entry.name}</span>
                   </div>
                 ))}
@@ -704,116 +473,8 @@ export default function AnalyticsView() {
             </div>
           </div>
 
-          {/* 3. Source System Summary Cards */}
-          <div className="space-y-3 pt-4">
-            <h3 className="font-bold text-base flex items-center gap-1.5 text-text-main">
-              <Layers size={18} className="text-accent" />
-              Source Systems Performance
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {Object.entries(sourceStats).map(([key, data]: [string, any]) => {
-                const label = getReadableLabel(key);
-                return (
-                  <div key={key} className="bg-panel border border-border-main rounded-xl p-5 shadow-sm space-y-3 flex flex-col justify-between">
-                    <div className="flex justify-between items-center">
-                      <h4 className="font-bold text-sm text-text-main">{label} Summary</h4>
-                      <span className="text-[10px] text-muted-main font-semibold">{data.count} txs</span>
-                    </div>
-                    <div className="space-y-1">
-                      <div className="flex justify-between text-xs font-semibold">
-                        <span className="text-muted-main">Incoming Inflow:</span>
-                        <span className="text-success-main font-mono">{formatKES(data.incoming)}</span>
-                      </div>
-                      <div className="flex justify-between text-xs font-semibold">
-                        <span className="text-muted-main">Outgoing Outflow:</span>
-                        <span className="text-danger font-mono">{formatKES(data.outgoing)}</span>
-                      </div>
-                      <div className="flex justify-between text-xs font-bold border-t border-border-main/55 pt-1">
-                        <span className="text-text-main">Net Cash Flow:</span>
-                        <span className={`font-mono ${data.net >= 0 ? 'text-success-main' : 'text-danger'}`}>{formatKES(data.net)}</span>
-                      </div>
-                    </div>
-                    <div className="flex justify-between items-center text-[10px] text-muted-main border-t border-border-main/40 pt-2 flex-wrap gap-1">
-                      <span>Share of Incoming: <strong>{data.percentage.toFixed(1)}%</strong></span>
-                      {renderDelta(data.delta)}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* 4. BingwaZone Dissection Panels */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pt-4">
-            
-            {/* BingwaZone Modules (Column span 2) */}
-            <div className="bg-panel border border-border-main rounded-xl p-5 shadow-sm space-y-4 lg:col-span-2">
-              <div className="flex justify-between items-center">
-                <div>
-                  <h3 className="font-bold text-sm flex items-center gap-1.5 text-text-main">
-                    <Sparkles size={16} className="text-accent" />
-                    BingwaZone Modules Inbound Revenue
-                  </h3>
-                  <p className="text-[11px] text-muted-main">Revenue split across micro-systems. Withdrawals excluded.</p>
-                </div>
-                <div className="text-right text-[10px] font-semibold text-muted-main bg-background/50 border border-border-main rounded-lg py-1 px-2">
-                  Withdrawals: <strong className="text-danger font-mono">{formatKES(bzWithdrawals.amount)}</strong> ({bzWithdrawals.count} txs)
-                </div>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {bzModuleStats.map(mod => (
-                  <div key={mod.id} className="bg-background/40 border border-border-main/60 rounded-xl p-4 flex flex-col justify-between h-28 shadow-2xs">
-                    <div className="flex justify-between items-center">
-                      <span className="text-[10px] font-bold text-text-main">{mod.name}</span>
-                      <span className="text-[10px] text-muted-main font-mono">{mod.count} sales</span>
-                    </div>
-                    <div className="flex items-baseline justify-between mt-2 flex-wrap gap-1">
-                      <h4 className="text-base font-bold font-mono text-accent">{formatKES(mod.revenue)}</h4>
-                      <span className="text-[9px] text-muted-main">Avg: <strong className="font-mono text-text-main">{formatKES(mod.average)}</strong></span>
-                    </div>
-                    <div className="flex justify-between items-center text-[9px] text-muted-main border-t border-border-main/30 pt-1.5 flex-wrap gap-1">
-                      <span>Share of BingwaZone: <strong>{mod.percentage.toFixed(1)}%</strong></span>
-                      {renderDelta(mod.delta)}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Top Agents Panel */}
-            <div className="bg-panel border border-border-main rounded-xl p-5 shadow-sm space-y-4">
-              <div>
-                <h3 className="font-bold text-sm flex items-center gap-1.5 text-text-main">
-                  <Award size={16} className="text-warning-main" />
-                  Top BingwaZone Agents
-                </h3>
-                <p className="text-xs text-muted-main">Highest billing agent operators by incoming totals</p>
-              </div>
-              {topAgents.length === 0 ? (
-                <p className="text-xs text-muted-main italic text-center py-12">No agent transactions recorded in range.</p>
-              ) : (
-                <div className="space-y-2.5">
-                  {topAgents.map((ag, idx) => (
-                    <div key={ag.name + idx} className="bg-background/40 border border-border-main/50 rounded-xl p-3 flex justify-between items-center">
-                      <div>
-                        <span className="text-xs font-bold text-text-main">{ag.name}</span>
-                        {ag.business && <span className="text-[10px] text-muted-main block font-semibold">{ag.business}</span>}
-                        {ag.username && <span className="text-[9px] text-muted-main font-mono">@{ag.username}</span>}
-                      </div>
-                      <div className="text-right">
-                        <span className="text-xs font-bold text-accent font-mono block">{formatKES(ag.volume)}</span>
-                        <span className="text-[9px] text-muted-main font-mono">{ag.count} txs</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-          </div>
-
-          {/* 5. Pesatrix Performance Panel */}
-          <div className="bg-panel border border-border-main rounded-xl p-5 shadow-sm space-y-4 pt-4">
+          {/* 3. Pesatrix Activations & Payout Flows Panel */}
+          <div className="bg-panel border border-border-main rounded-2xl p-5 shadow-sm space-y-4">
             <div>
               <h3 className="font-bold text-sm flex items-center gap-1.5 text-text-main">
                 <Layers size={16} className="text-success-main" />
@@ -829,7 +490,7 @@ export default function AnalyticsView() {
                 { label: 'Net Pesatrix Flow', value: formatKES(pesatrixStats.netFlow), desc: 'Activation inflow minus B2C' },
                 { label: 'Withdrawal-to-Activation Ratio', value: `${pesatrixStats.withdrawalRatio.toFixed(1)}%`, desc: 'Ratio of payouts to revenue' }
               ].map((k, i) => (
-                <div key={i} className="bg-background/30 border border-border-main rounded-xl p-4 flex flex-col justify-between h-24 shadow-2xs">
+                <div key={i} className="bg-background/35 border border-border-main/70 rounded-xl p-4 flex flex-col justify-between h-24 shadow-2xs">
                   <span className="text-[9px] font-bold text-muted-main uppercase tracking-wider block">{k.label}</span>
                   <div className="mt-1">
                     <h4 className="text-base font-bold font-mono text-text-main">{k.value}</h4>
@@ -840,10 +501,10 @@ export default function AnalyticsView() {
             </div>
           </div>
 
-          {/* 6. In-depth Visualizations (Payment Type & Service Source & Reconciliation Status) */}
+          {/* 4. In-depth Visualizations */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pt-4">
             {/* Payment Type Distribution */}
-            <div className="bg-panel border border-border-main rounded-xl p-5 shadow-sm space-y-4">
+            <div className="bg-panel border border-border-main rounded-2xl p-5 shadow-sm space-y-4">
               <div>
                 <h3 className="font-bold text-sm flex items-center gap-1.5 text-text-main">
                   <BarChart3 size={16} className="text-accent" />
@@ -860,7 +521,7 @@ export default function AnalyticsView() {
                       <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="var(--border-main)" />
                       <XAxis type="number" stroke="var(--muted-main)" />
                       <YAxis dataKey="name" type="category" stroke="var(--muted-main)" width={80} />
-                      <Tooltip contentStyle={{ backgroundColor: 'var(--panel)', borderColor: 'var(--border-main)', color: 'var(--text-main)' }} />
+                      <Tooltip contentStyle={{ backgroundColor: 'var(--panel)', borderColor: 'var(--border-main)', color: 'var(--text-main)', borderRadius: '12px' }} formatter={(v) => [formatKES(v as number), '']} />
                       <Bar dataKey="volume" fill="#00BFFF" radius={[0, 3, 3, 0]} name="Volume" />
                     </BarChart>
                   </ResponsiveContainer>
@@ -869,7 +530,7 @@ export default function AnalyticsView() {
             </div>
 
             {/* Service Source Distribution */}
-            <div className="bg-panel border border-border-main rounded-xl p-5 shadow-sm space-y-4">
+            <div className="bg-panel border border-border-main rounded-2xl p-5 shadow-sm space-y-4">
               <div>
                 <h3 className="font-bold text-sm flex items-center gap-1.5 text-text-main">
                   <BarChart3 size={16} className="text-success-main" />
@@ -878,15 +539,15 @@ export default function AnalyticsView() {
                 <p className="text-xs text-muted-main">Top billing business service sources</p>
               </div>
               <div className="h-60 w-full text-xs">
-                {charts.serviceSources.length === 0 ? (
+                {charts.sourceRevenue.length === 0 ? (
                   <p className="text-xs text-muted-main italic text-center py-20">No matching data.</p>
                 ) : (
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={charts.serviceSources} layout="vertical" margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
+                    <BarChart data={charts.sourceRevenue} layout="vertical" margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="var(--border-main)" />
                       <XAxis type="number" stroke="var(--muted-main)" />
                       <YAxis dataKey="name" type="category" stroke="var(--muted-main)" width={100} />
-                      <Tooltip contentStyle={{ backgroundColor: 'var(--panel)', borderColor: 'var(--border-main)', color: 'var(--text-main)' }} />
+                      <Tooltip contentStyle={{ backgroundColor: 'var(--panel)', borderColor: 'var(--border-main)', color: 'var(--text-main)', borderRadius: '12px' }} formatter={(v) => [formatKES(v as number), '']} />
                       <Bar dataKey="volume" fill="#0DB02B" radius={[0, 3, 3, 0]} name="Volume" />
                     </BarChart>
                   </ResponsiveContainer>
@@ -895,37 +556,41 @@ export default function AnalyticsView() {
             </div>
 
             {/* Reconciliation status distribution */}
-            <div className="bg-panel border border-border-main rounded-xl p-5 shadow-sm space-y-4 flex flex-col justify-between">
+            <div className="bg-panel border border-border-main rounded-2xl p-5 shadow-sm space-y-4 flex flex-col justify-between">
               <div>
                 <h3 className="font-bold text-sm flex items-center gap-1.5 text-text-main">
                   <PieIcon size={16} className="text-warning-main" />
-                  Reconciliation Status Distribution
+                  Reconciliation Distribution
                 </h3>
                 <p className="text-xs text-muted-main">Audit distribution in the current calendar range</p>
               </div>
               <div className="h-44 w-full flex items-center justify-center text-xs">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={charts.reconDistribution}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={45}
-                      outerRadius={65}
-                      paddingAngle={3}
-                      dataKey="value"
-                      nameKey="name"
-                    >
-                      {charts.reconDistribution.map((entry: any, index: number) => (
-                        <Cell key={`cell-recon-${index}`} fill={COLORS[(index + 2) % COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip contentStyle={{ backgroundColor: 'var(--panel)', borderColor: 'var(--border-main)', color: 'var(--text-main)' }} />
-                  </PieChart>
-                </ResponsiveContainer>
+                {charts.reconciliationDist.length === 0 ? (
+                  <p className="text-xs text-muted-main italic py-10">No audit records found.</p>
+                ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={charts.reconciliationDist}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={45}
+                        outerRadius={65}
+                        paddingAngle={3}
+                        dataKey="value"
+                        nameKey="name"
+                      >
+                        {charts.reconciliationDist.map((entry: any, index: number) => (
+                          <Cell key={`cell-recon-${index}`} fill={COLORS[(index + 2) % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip contentStyle={{ backgroundColor: 'var(--panel)', borderColor: 'var(--border-main)', color: 'var(--text-main)', borderRadius: '12px' }} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                )}
               </div>
               <div className="grid grid-cols-2 gap-1.5 text-[8.5px] text-muted-main font-semibold border-t border-border-main pt-2">
-                {charts.reconDistribution.map((entry: any, index: number) => (
+                {charts.reconciliationDist.map((entry: any, index: number) => (
                   <div key={entry.name} className="flex items-center gap-1 justify-center truncate">
                     <div className="w-2 h-2 rounded shrink-0" style={{ backgroundColor: COLORS[(index + 2) % COLORS.length] }} />
                     <span className="truncate">{entry.name}: {entry.value}</span>
@@ -933,10 +598,9 @@ export default function AnalyticsView() {
                 ))}
               </div>
             </div>
-
           </div>
 
-          {/* 7. Unattributed / Conflicts warnings */}
+          {/* 5. Unattributed / Conflicts warnings */}
           {globalKpis.reconciliationConflicts > 0 && (
             <div className="p-4 bg-danger/10 border border-danger/20 rounded-xl text-danger text-xs font-semibold flex items-center gap-2.5">
               <ShieldAlert size={18} className="shrink-0 animate-pulse" />
@@ -948,7 +612,6 @@ export default function AnalyticsView() {
           )}
         </>
       )}
-
     </div>
   );
 }

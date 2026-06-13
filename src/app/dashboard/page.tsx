@@ -15,6 +15,7 @@ import AuditView from '@/components/views/AuditView';
 import SettingsView from '@/components/views/SettingsView';
 import SettlementView from '@/components/views/SettlementView';
 import NotificationsView from '@/components/views/NotificationsView';
+import ServicesView from '@/components/views/ServicesView';
 
 export default function DashboardRootPage() {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -35,6 +36,8 @@ export default function DashboardRootPage() {
         return <ReversalsView />;
       case 'settlement':
         return <SettlementView />;
+      case 'services':
+        return <ServicesView />;
       case 'analytics':
         return <AnalyticsView />;
       case 'audit':
@@ -47,6 +50,7 @@ export default function DashboardRootPage() {
         return <DashboardView />;
     }
   };
+
 
   return (
     <Shell activeTab={activeTab} setActiveTab={setActiveTab}>

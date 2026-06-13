@@ -1,4 +1,5 @@
 import { createClient } from '../supabase/server';
+import { getReadableLabel } from '../utils/labels';
 
 export async function getAnalyticsData() {
   const supabase = await createClient();
@@ -55,20 +56,31 @@ export async function getAnalyticsData() {
   let revenueMonth = 0;
   let revenueYear = 0;
 
-  // Revenue by Day (last 7 days) & Cashflow by Day
-  const dailyDataMap: { [date: string]: { date: string; revenue: number; inflow: number; outflow: number } } = {};
+  // Revenue by Day (last 7 days) & Cashflow by Day (including BingwaZone / Pesatrix)
+  const dailyDataMap: { [date: string]: { date: string; revenue: number; inflow: number; outflow: number; bingwazoneInflow: number; pesatrixInflow: number; bingwazoneOutflow: number; pesatrixOutflow: number } } = {};
+  
   // Initialize last 7 days
   for (let i = 6; i >= 0; i--) {
     const d = new Date();
     d.setDate(now.getDate() - i);
     const dateStr = d.toLocaleDateString('en-KE', { month: 'short', day: 'numeric' });
-    dailyDataMap[dateStr] = { date: dateStr, revenue: 0, inflow: 0, outflow: 0 };
+    dailyDataMap[dateStr] = { 
+      date: dateStr, 
+      revenue: 0, 
+      inflow: 0, 
+      outflow: 0,
+      bingwazoneInflow: 0,
+      pesatrixInflow: 0,
+      bingwazoneOutflow: 0,
+      pesatrixOutflow: 0
+    };
   }
 
   // Source mapping
   const sourceMap: { [name: string]: number } = {};
   const referenceMap: { [ref: string]: { name: string; value: number } } = {};
   const phoneMap: { [phone: string]: number } = {};
+  const moduleMap: { [mod: string]: number } = {};
 
   // Success rate counts
   let stkSuccess = 0, stkTotal = 0;
@@ -105,11 +117,21 @@ export async function getAnalyticsData() {
       if (dailyDataMap[dateStr]) {
         dailyDataMap[dateStr].revenue += amount;
         dailyDataMap[dateStr].inflow += amount;
+        if (tx.source_system === 'bingwazone') {
+          dailyDataMap[dateStr].bingwazoneInflow += amount;
+        } else if (tx.source_system === 'pesatrix') {
+          dailyDataMap[dateStr].pesatrixInflow += amount;
+        }
       }
 
       // Source distribution
-      const sourceName = tx.product_sources?.name || 'Unknown';
+      const sourceName = tx.source_system === 'bingwazone' ? 'BingwaZone' : tx.source_system === 'pesatrix' ? 'Pesatrix' : getReadableLabel(tx.product_sources?.name || tx.source_system || 'Manual');
       sourceMap[sourceName] = (sourceMap[sourceName] || 0) + amount;
+
+      // Module distribution
+      if (tx.module) {
+        moduleMap[tx.module] = (moduleMap[tx.module] || 0) + amount;
+      }
 
       // Reference aggregations
       const ref = tx.account_reference || 'UNKNOWN';
@@ -121,6 +143,11 @@ export async function getAnalyticsData() {
       // Group by daily outflow
       if (dailyDataMap[dateStr]) {
         dailyDataMap[dateStr].outflow += amount;
+        if (tx.source_system === 'bingwazone') {
+          dailyDataMap[dateStr].bingwazoneOutflow += amount;
+        } else if (tx.source_system === 'pesatrix') {
+          dailyDataMap[dateStr].pesatrixOutflow += amount;
+        }
       }
     }
 
@@ -137,13 +164,25 @@ export async function getAnalyticsData() {
     inflow: d.inflow,
     outflow: d.outflow,
     net: d.inflow - d.outflow,
+    bingwazoneVolume: d.bingwazoneInflow + d.bingwazoneOutflow,
+    pesatrixVolume: d.pesatrixInflow + d.pesatrixOutflow,
+    bingwazoneInflow: d.bingwazoneInflow,
+    pesatrixInflow: d.pesatrixInflow,
+    bingwazoneOutflow: d.bingwazoneOutflow,
+    pesatrixOutflow: d.pesatrixOutflow
   }));
 
   // Revenue by source dataset
   const revenueBySource = Object.entries(sourceMap).map(([name, value]) => ({
     name,
     value,
-  }));
+  })).sort((a, b) => b.value - a.value);
+
+  // Module Share dataset
+  const moduleShare = Object.entries(moduleMap).map(([name, value]) => ({
+    name: getReadableLabel(name),
+    value,
+  })).sort((a, b) => b.value - a.value);
 
   // Top references
   const topReferences = Object.values(referenceMap)
@@ -167,6 +206,7 @@ export async function getAnalyticsData() {
       revenueTrend,
       cashflowTrend,
       revenueBySource: revenueBySource.length > 0 ? revenueBySource : [{ name: 'No Data', value: 0 }],
+      moduleShare: moduleShare.length > 0 ? moduleShare : [{ name: 'No Data', value: 0 }],
       balanceTrend: balanceTrend.length > 0 ? balanceTrend : [{ date: 'Today', balance: 0 }],
       topReferences,
       topPhoneNumbers,
@@ -186,6 +226,7 @@ function getEmptyAnalytics() {
       revenueTrend: [],
       cashflowTrend: [],
       revenueBySource: [{ name: 'No Data', value: 0 }],
+      moduleShare: [{ name: 'No Data', value: 0 }],
       balanceTrend: [{ date: 'Today', balance: 0 }],
       topReferences: [],
       topPhoneNumbers: [],
@@ -193,3 +234,4 @@ function getEmptyAnalytics() {
     },
   };
 }
+

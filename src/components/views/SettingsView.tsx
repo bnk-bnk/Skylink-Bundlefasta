@@ -391,8 +391,8 @@ export default function SettingsView() {
                 <Mail size={20} />
               </div>
               <div>
-                <h3 className="font-bold text-sm text-text-main">SMS Alert Configuration</h3>
-                <p className="text-xs text-muted-main">Configure administrator phone alert rules for PayBill inflows and outflows</p>
+                <h3 className="font-bold text-sm text-text-main">Notification & Alert Channel Settings</h3>
+                <p className="text-xs text-muted-main">Configure administrator SMS & WhatsApp alert channel delivery rules for PayBill inflows and outflows</p>
               </div>
             </div>
 

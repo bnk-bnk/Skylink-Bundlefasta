@@ -5,6 +5,20 @@ All notable changes to the Skylink Bundlefasta Dashboard project will be documen
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to Semantic Versioning.
 
+## [1.5.0] - 2026-06-13
+
+### Added
+- Created the dedicated **Services View** ([ServicesView.tsx](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/components/views/ServicesView.tsx)) component detailing inflows/outflows, module revenue share breakdown (e.g. mini-sites, WhatsApp bot, activations), transaction type splits, and recent B2C payout logs for **BingwaZone** and **Pesatrix** services.
+- Added `getServicesStatsAction()` server action inside [actions.ts](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/app/actions.ts) to compute financial statistics, module revenues, and recent payouts for active services.
+
+### Changed
+- Upgraded the **Dashboard View** ([DashboardView.tsx](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/components/views/DashboardView.tsx)) with a balance refresh trigger executing `refreshBalanceAction()` inline without leaving the page.
+- Replaced outdated KPI widgets with optimized cards: Current Balance, Incoming Today, Outgoing Today, Pesatrix Flow (In/Out), BingwaZone Flow (In/Out), and Alert Notification Outbox Stats.
+- Upgraded dashboard charts to feature Service Revenue Trend (7-day Area), Service Volumes comparison (Bar), Inflow Share by Module (Pie), and Historical Balance Trend.
+- Overhauled the **Analytics View** ([AnalyticsView.tsx](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/components/views/AnalyticsView.tsx)) to support advanced multi-dimensional filtering (Date Range, Service Source, Module, Flow Direction, Transaction Type, Reconciliation Status, Search keywords) and dynamic contextual module selection.
+- Redesigned settings card title in [SettingsView.tsx](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/components/views/SettingsView.tsx) to "Notification & Alert Channel Settings" to represent both SMS & WhatsApp channels clearly.
+- Renamed "SMS Logs" sidebar menu item in [Shell.tsx](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/components/layout/Shell.tsx) to "Notification Logs".
+
 ## [1.4.0] - 2026-06-13
 
 ### Added

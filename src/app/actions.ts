@@ -918,3 +918,106 @@ export async function sendTestNotificationAction() {
     return { success: false, error: err.message };
   }
 }
+
+export async function getServicesStatsAction() {
+  await checkAuth();
+  const supabase = await createClient();
+
+  try {
+    const { data: txs, error } = await supabase
+      .from('transactions')
+      .select('*')
+      .in('source_system', ['bingwazone', 'pesatrix'])
+      .eq('status', 'SUCCESS')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    const txList = txs || [];
+
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayMs = todayStart.getTime();
+
+    const getStatsForService = (serviceName: string) => {
+      const serviceTxs = txList.filter((t: any) => t.source_system === serviceName);
+      
+      const totalInflow = serviceTxs
+        .filter((t: any) => t.direction === 'IN')
+        .reduce((sum: number, t: any) => sum + Number(t.amount), 0);
+
+      const totalOutflow = serviceTxs
+        .filter((t: any) => t.direction === 'OUT')
+        .reduce((sum: number, t: any) => sum + Number(t.amount), 0);
+
+      const inflowToday = serviceTxs
+        .filter((t: any) => t.direction === 'IN' && new Date(t.created_at).getTime() >= todayMs)
+        .reduce((sum: number, t: any) => sum + Number(t.amount), 0);
+
+      const outflowToday = serviceTxs
+        .filter((t: any) => t.direction === 'OUT' && new Date(t.created_at).getTime() >= todayMs)
+        .reduce((sum: number, t: any) => sum + Number(t.amount), 0);
+
+      // Group inflow by module
+      const moduleMap: Record<string, number> = {};
+      const moduleCountMap: Record<string, number> = {};
+      
+      serviceTxs
+        .filter((t: any) => t.direction === 'IN')
+        .forEach((t: any) => {
+          const m = t.module || 'unknown';
+          moduleMap[m] = (moduleMap[m] || 0) + Number(t.amount);
+          moduleCountMap[m] = (moduleCountMap[m] || 0) + 1;
+        });
+
+      const modules = Object.entries(moduleMap).map(([name, volume]) => ({
+        name,
+        volume,
+        count: moduleCountMap[name] || 0
+      })).sort((a, b) => b.volume - a.volume);
+
+      // Group by payment/transaction type
+      const typeMap: Record<string, number> = {};
+      const typeCountMap: Record<string, number> = {};
+      
+      serviceTxs.forEach((t: any) => {
+        const type = t.transaction_type || 'unknown';
+        typeMap[type] = (typeMap[type] || 0) + Number(t.amount);
+        typeCountMap[type] = (typeCountMap[type] || 0) + 1;
+      });
+
+      const types = Object.entries(typeMap).map(([name, volume]) => ({
+        name,
+        volume,
+        count: typeCountMap[name] || 0
+      })).sort((a, b) => b.volume - a.volume);
+
+      const recentPayouts = serviceTxs
+        .filter((t: any) => t.direction === 'OUT')
+        .slice(0, 10);
+
+      return {
+        totalVolume: totalInflow + totalOutflow,
+        totalInflow,
+        totalOutflow,
+        inflowToday,
+        outflowToday,
+        txCount: serviceTxs.length,
+        modules,
+        types,
+        recentPayouts
+      };
+    };
+
+    return {
+      success: true,
+      bingwazone: getStatsForService('bingwazone'),
+      pesatrix: getStatsForService('pesatrix')
+    };
+
+  } catch (err: any) {
+    console.error('getServicesStatsAction failed:', err);
+    return { success: false, error: err.message };
+  }
+}
+
