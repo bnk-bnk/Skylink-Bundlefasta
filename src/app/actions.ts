@@ -625,7 +625,8 @@ export async function getSmsSettingsAction() {
         sender_id: '',
         incoming_alerts_enabled: true,
         outgoing_alerts_enabled: true,
-        pesafrix_till_number: ''
+        pesafrix_till_number: '',
+        notification_channel: 'sms'
       })
       .select()
       .single();
@@ -646,6 +647,7 @@ export async function updateSmsSettingsAction(params: {
   incoming_alerts_enabled: boolean;
   outgoing_alerts_enabled: boolean;
   pesafrix_till_number: string;
+  notification_channel?: string;
 }) {
   const user = await checkAuth();
   const adminSupabase = createAdminClient();
@@ -658,6 +660,7 @@ export async function updateSmsSettingsAction(params: {
       incoming_alerts_enabled: params.incoming_alerts_enabled,
       outgoing_alerts_enabled: params.outgoing_alerts_enabled,
       pesafrix_till_number: params.pesafrix_till_number,
+      notification_channel: params.notification_channel || 'sms',
       updated_at: new Date().toISOString()
     })
     .eq('id', '00000000-0000-0000-0000-000000000001')
@@ -669,13 +672,14 @@ export async function updateSmsSettingsAction(params: {
     throw error;
   }
 
-  await logAudit('SMS_SETTINGS_UPDATED', {
+  await logAudit('NOTIFICATION_SETTINGS_UPDATED', {
     userId: user.id,
     admin_alert_phone: params.admin_alert_phone,
     sender_id: params.sender_id,
     incoming_alerts_enabled: params.incoming_alerts_enabled,
     outgoing_alerts_enabled: params.outgoing_alerts_enabled,
-    pesafrix_till_number: params.pesafrix_till_number
+    pesafrix_till_number: params.pesafrix_till_number,
+    notification_channel: params.notification_channel || 'sms'
   });
 
   return data;
@@ -715,6 +719,100 @@ export async function getSmsNotificationsAction(filters: {
   return data || [];
 }
 
+export async function getNotificationDeliveriesAction(filters: {
+  status?: string;
+  channel?: string;
+  recipient?: string;
+  direction?: string;
+  sourceSystem?: string;
+  limit?: number;
+  offset?: number;
+} = {}) {
+  await checkAuth();
+  const supabase = await createClient();
+
+  let query = supabase
+    .from('notification_deliveries')
+    .select(`
+      *,
+      transactions (
+        id,
+        direction,
+        transaction_type,
+        amount,
+        receipt,
+        mpesa_receipt,
+        source_system,
+        created_at
+      ),
+      webhook_events (
+        id,
+        source_system,
+        event_key,
+        event_type,
+        processing_status,
+        created_at
+      )
+    `)
+    .order('created_at', { ascending: false });
+
+  if (filters.status) {
+    query = query.eq('status', filters.status);
+  }
+  if (filters.channel) {
+    query = query.eq('channel', filters.channel);
+  }
+  if (filters.recipient) {
+    query = query.ilike('recipient', `%${filters.recipient}%`);
+  }
+  if (filters.direction) {
+    query = query.eq('notification_type', `${filters.direction}_alert`);
+  }
+  if (filters.sourceSystem) {
+    query = query.eq('transactions.source_system', filters.sourceSystem);
+  }
+
+  const limit = filters.limit || 50;
+  const offset = filters.offset || 0;
+  query = query.range(offset, offset + limit - 1);
+
+  const { data, error } = await query;
+  if (error) {
+    console.error('Failed to fetch notification deliveries:', error);
+    return [];
+  }
+
+  return data || [];
+}
+
+export async function getWebhookEventsAction(filters: {
+  transactionId?: string;
+  limit?: number;
+} = {}) {
+  await checkAuth();
+  const supabase = await createClient();
+
+  let query = supabase
+    .from('webhook_events')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (filters.transactionId) {
+    query = query.eq('transaction_id', filters.transactionId);
+  }
+
+  if (filters.limit) {
+    query = query.limit(filters.limit);
+  }
+
+  const { data, error } = await query;
+  if (error) {
+    console.error('Failed to fetch webhook events:', error);
+    return [];
+  }
+  return data || [];
+}
+
 export async function getSmsStatsAction() {
   await checkAuth();
   const supabase = await createClient();
@@ -725,24 +823,98 @@ export async function getSmsStatsAction() {
 
   // Sent Today (status = 'SENT' and created_at >= today)
   const { count: sentToday, error: sentErr } = await supabase
-    .from('sms_notifications')
+    .from('notification_deliveries')
     .select('*', { count: 'exact', head: true })
     .eq('status', 'SENT')
     .gte('created_at', todayISO);
 
-  if (sentErr) console.error('Error fetching sent SMS stats:', sentErr);
+  if (sentErr) console.error('Error fetching sent stats:', sentErr);
 
   // Failed Today (status = 'FAILED' and created_at >= today)
   const { count: failedToday, error: failedErr } = await supabase
-    .from('sms_notifications')
+    .from('notification_deliveries')
     .select('*', { count: 'exact', head: true })
     .eq('status', 'FAILED')
     .gte('created_at', todayISO);
 
-  if (failedErr) console.error('Error fetching failed SMS stats:', failedErr);
+  if (failedErr) console.error('Error fetching failed stats:', failedErr);
+
+  // Queued (status = 'PENDING' or 'processing')
+  const { count: queued } = await supabase
+    .from('notification_deliveries')
+    .select('*', { count: 'exact', head: true })
+    .in('status', ['PENDING', 'queued', 'processing']);
+
+  // Get active notification settings
+  const { data: settings } = await supabase
+    .from('sms_settings')
+    .select('notification_channel')
+    .eq('id', '00000000-0000-0000-0000-000000000001')
+    .maybeSingle();
+
+  // Last successful notification timestamp
+  const { data: lastSuccessfulData } = await supabase
+    .from('notification_deliveries')
+    .select('sent_at')
+    .eq('status', 'SENT')
+    .order('sent_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
 
   return {
     sentToday: sentToday || 0,
-    failedToday: failedToday || 0
+    failedToday: failedToday || 0,
+    queued: queued || 0,
+    channel: settings?.notification_channel || 'sms',
+    lastSuccessful: lastSuccessfulData?.sent_at || null
   };
+}
+
+export async function sendTestNotificationAction() {
+  const user = await checkAuth();
+
+  try {
+    const supabase = await createClient();
+    const { data: tx } = await supabase
+      .from('transactions')
+      .select('*')
+      .eq('status', 'SUCCESS')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const testTx = tx || {
+      id: '00000000-0000-0000-0000-000000000000',
+      source_system: 'bingwazone',
+      direction: 'IN',
+      transaction_type: 'STK',
+      amount: 100,
+      account_reference: 'TEST ALERT',
+      phone_number: '254712345678',
+      mpesa_receipt: 'TESTRECEIPT',
+      module: 'bundle'
+    };
+
+    const { triggerNotificationFlow } = await import('@/lib/notifications/send-transaction-alert');
+
+    // Trigger the flow
+    await triggerNotificationFlow({
+      transaction_id: testTx.id,
+      source_system: testTx.source_system || 'manual',
+      direction: testTx.direction || 'IN',
+      transaction_type: testTx.transaction_type || 'STK',
+      amount: Number(testTx.amount),
+      account_reference: testTx.account_reference || 'Test alert reference',
+      phone_number: testTx.phone_number || '254712345678',
+      mpesa_receipt: testTx.mpesa_receipt || 'TESTING123',
+      module: testTx.module || 'test'
+    });
+
+    await logAudit('TEST_NOTIFICATION_SENT', { userId: user.id });
+    return { success: true };
+  } catch (err: any) {
+    console.error('Test notification failed:', err);
+    await logAudit('TEST_NOTIFICATION_FAILED', { userId: user.id, error: err.message });
+    return { success: false, error: err.message };
+  }
 }

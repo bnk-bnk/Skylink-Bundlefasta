@@ -5,6 +5,28 @@ All notable changes to the Skylink Bundlefasta Dashboard project will be documen
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to Semantic Versioning.
 
+## [1.4.0] - 2026-06-13
+
+### Added
+- Created BingwaZone and Pesatrix webhook ingestion controllers inside [src/app/api/webhooks/bingwazone/route.ts](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/app/api/webhooks/bingwazone/route.ts) and [src/app/api/webhooks/pesatrix/route.ts](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/app/api/webhooks/pesatrix/route.ts) supporting HMAC timing-safe signature verification, raw event logging, and transaction reconciliation.
+- Added constant-time HMAC signature verification helper in [src/lib/webhooks/verify-hmac.ts](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/lib/webhooks/verify-hmac.ts).
+- Added Kenyan phone normalization utility [src/lib/utils/phone.ts](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/lib/utils/phone.ts) for E.164 conversion.
+- Created `reconcile_webhook_event` RPC database trigger and reconciliation driver inside [src/lib/services/reconciliation.ts](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/lib/services/reconciliation.ts) for canonical transaction reconciliation, deduplication, auto-matching, and drift detection.
+- Integrated unified notifications service under [src/lib/notifications/send-transaction-alert.ts](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/lib/notifications/send-transaction-alert.ts) supporting deduplication, outbox pattern tracking, custom formatting templates, and alert toggling.
+- Added Scope SMS notification provider inside [src/lib/notifications/providers/scope-sms.ts](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/lib/notifications/providers/scope-sms.ts) and Evolution WhatsApp notification provider inside [src/lib/notifications/providers/evolution-whatsapp.ts](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/lib/notifications/providers/evolution-whatsapp.ts).
+- Created safe client utility [src/lib/utils/labels.ts](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/lib/utils/labels.ts) to resolve human-readable source/module names without compiling server-side Next.js dependencies.
+- Added native automated test suite [tests/webhooks.test.ts](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/tests/webhooks.test.ts) covering HMAC validations, phone normalization, text formatting, and mapping labels.
+
+### Changed
+- Updated [src/app/actions.ts](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/app/actions.ts) to support channels selection setting, notification outbox logs query, raw webhook events, and alert simulation triggers.
+- Updated database typings inside [src/types/database.ts](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/types/database.ts) to extend `Database` types for `webhook_events`, `notification_deliveries`, and revised transaction columns.
+- Rewrote [TransactionsView.tsx](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/components/views/TransactionsView.tsx) to feature a detail drawer displaying reconciliation status, discrepancy alerts, auto-matched status, and raw webhook event payloads.
+- Rewrote [NotificationsView.tsx](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/components/views/NotificationsView.tsx) to support both SMS and WhatsApp notification logs, recipient searches, and status details.
+- Updated [DashboardView.tsx](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/components/views/DashboardView.tsx) to dynamically report queued/sent notification outbox stats based on current channel settings.
+- Updated [SettingsView.tsx](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/components/views/SettingsView.tsx) to allow toggling notification channels (SMS vs WhatsApp) and sending test simulation alerts.
+- Rewrote [AnalyticsView.tsx](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/components/views/AnalyticsView.tsx) to incorporate source performance cards, reconciliation status, and custom volume charts.
+- Updated resolveSourceId inside [src/lib/repositories/transactions.ts](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/lib/repositories/transactions.ts) to support database operations using server clients.
+
 ## [1.3.0] - 2026-05-30
 
 ### Added

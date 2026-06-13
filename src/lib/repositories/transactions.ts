@@ -42,6 +42,19 @@ export interface TransactionFilters {
   dateEnd?: string;
   limit?: number;
   offset?: number;
+  sourceSystem?: string;
+  paymentType?: string;
+  module?: string;
+  productStream?: string;
+  serviceSource?: string;
+  currency?: string;
+  minAmount?: number;
+  maxAmount?: number;
+  reconciliationStatus?: string;
+  receiptSearch?: string;
+  phoneSearch?: string;
+  agentNameOrUsername?: string;
+  userIdOrAgentId?: string;
 }
 
 // Fetch all transactions with filters
@@ -57,7 +70,7 @@ export async function getTransactions(filters: TransactionFilters = {}) {
         name,
         reference
       )
-    `)
+    `, { count: 'exact' }) // Ensure we get the exact count
     .order('created_at', { ascending: false });
 
   if (filters.direction) {
@@ -67,13 +80,17 @@ export async function getTransactions(filters: TransactionFilters = {}) {
     query = query.eq('transaction_type', filters.transactionType);
   }
   if (filters.sourceId) {
-    query = query.eq('source_id', filters.sourceId);
+    if (filters.sourceId === 'null') {
+      query = query.is('source_id', null);
+    } else {
+      query = query.eq('source_id', filters.sourceId);
+    }
   }
   if (filters.status) {
     query = query.eq('status', filters.status);
   }
   if (filters.phoneNumber) {
-    query = query.ilike('phone_number', `%${filters.phoneNumber}%`);
+    query = query.or(`phone_number.ilike.%${filters.phoneNumber}%,payer_phone.ilike.%${filters.phoneNumber}%,recipient_phone.ilike.%${filters.phoneNumber}%`);
   }
   if (filters.accountReference) {
     query = query.ilike('account_reference', `%${filters.accountReference}%`);
@@ -83,6 +100,47 @@ export async function getTransactions(filters: TransactionFilters = {}) {
   }
   if (filters.dateEnd) {
     query = query.lte('created_at', filters.dateEnd);
+  }
+  
+  // New column filters
+  if (filters.sourceSystem) {
+    query = query.eq('source_system', filters.sourceSystem);
+  }
+  if (filters.paymentType) {
+    query = query.eq('payment_type', filters.paymentType);
+  }
+  if (filters.module) {
+    query = query.eq('module', filters.module);
+  }
+  if (filters.productStream) {
+    query = query.eq('product_stream', filters.productStream);
+  }
+  if (filters.serviceSource) {
+    query = query.eq('service_source', filters.serviceSource);
+  }
+  if (filters.currency) {
+    query = query.eq('currency', filters.currency);
+  }
+  if (filters.minAmount !== undefined) {
+    query = query.gte('amount', filters.minAmount);
+  }
+  if (filters.maxAmount !== undefined) {
+    query = query.lte('amount', filters.maxAmount);
+  }
+  if (filters.reconciliationStatus) {
+    query = query.eq('reconciliation_status', filters.reconciliationStatus);
+  }
+  if (filters.receiptSearch) {
+    query = query.or(`mpesa_receipt.ilike.%${filters.receiptSearch}%,receipt.ilike.%${filters.receiptSearch}%`);
+  }
+  if (filters.phoneSearch) {
+    query = query.or(`phone_number.ilike.%${filters.phoneSearch}%,payer_phone.ilike.%${filters.phoneSearch}%,recipient_phone.ilike.%${filters.phoneSearch}%,counterparty_phone.ilike.%${filters.phoneSearch}%`);
+  }
+  if (filters.agentNameOrUsername) {
+    query = query.or(`agent_name.ilike.%${filters.agentNameOrUsername}%,agent_username.ilike.%${filters.agentNameOrUsername}%,agent_business_name.ilike.%${filters.agentNameOrUsername}%`);
+  }
+  if (filters.userIdOrAgentId) {
+    query = query.or(`external_user_id.ilike.%${filters.userIdOrAgentId}%,external_agent_id.ilike.%${filters.userIdOrAgentId}%`);
   }
   
   const limit = filters.limit || 50;

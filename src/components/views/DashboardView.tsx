@@ -36,7 +36,7 @@ const COLORS = ['#00BFFF', '#0DB02B', '#FF4500', '#FF3B30', '#6B7280'];
 export default function DashboardView() {
   const [stats, setStats] = useState<any>(null);
   const [analytics, setAnalytics] = useState<any>(null);
-  const [smsStats, setSmsStats] = useState<{ sentToday: number; failedToday: number } | null>(null);
+  const [smsStats, setSmsStats] = useState<{ sentToday: number; failedToday: number; queued?: number; channel?: string; lastSuccessful?: string | null } | null>(null);
   const [loading, setLoading] = useState(true);
 
   const loadData = async () => {
@@ -128,9 +128,13 @@ export default function DashboardView() {
       color: 'text-muted-main bg-muted-main/10',
     },
     {
-      title: 'SMS Alerts',
-      value: `Sent: ${smsStats?.sentToday || 0}`,
-      desc: `Failed: ${smsStats?.failedToday || 0}`,
+      title: 'Alert Notifications',
+      value: `${smsStats?.channel?.toUpperCase() || 'SMS'}: ${smsStats?.sentToday || 0} Sent`,
+      desc: `Failed: ${smsStats?.failedToday || 0} | Q: ${smsStats?.queued || 0}${
+        smsStats?.lastSuccessful
+          ? ` | Last: ${new Date(smsStats.lastSuccessful).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+          : ''
+      }`,
       icon: Mail,
       color: 'text-warning-main bg-warning-main/10',
     },

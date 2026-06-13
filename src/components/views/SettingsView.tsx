@@ -8,7 +8,8 @@ import {
   setPinAction,
   updatePasswordAction,
   getSmsSettingsAction,
-  updateSmsSettingsAction
+  updateSmsSettingsAction,
+  sendTestNotificationAction
 } from '@/app/actions';
 
 export default function SettingsView() {
@@ -38,6 +39,9 @@ export default function SettingsView() {
   const [outgoingEnabled, setOutgoingEnabled] = useState(true);
   const [pesafrixTillNumber, setPesafrixTillNumber] = useState('');
   
+  const [notificationChannel, setNotificationChannel] = useState<'sms' | 'whatsapp'>('sms');
+  const [testLoading, setTestLoading] = useState(false);
+  
   const [smsLoading, setSmsLoading] = useState(false);
   const [smsError, setSmsError] = useState('');
   const [smsSuccess, setSmsSuccess] = useState('');
@@ -60,6 +64,7 @@ export default function SettingsView() {
         setIncomingEnabled(data.incoming_alerts_enabled);
         setOutgoingEnabled(data.outgoing_alerts_enabled);
         setPesafrixTillNumber(data.pesafrix_till_number || '');
+        setNotificationChannel((data.notification_channel as 'sms' | 'whatsapp') || 'sms');
       }
     } catch (err) {
       console.error('Failed to load SMS settings:', err);
@@ -167,13 +172,32 @@ export default function SettingsView() {
         sender_id: senderId,
         incoming_alerts_enabled: incomingEnabled,
         outgoing_alerts_enabled: outgoingEnabled,
-        pesafrix_till_number: pesafrixTillNumber
+        pesafrix_till_number: pesafrixTillNumber,
+        notification_channel: notificationChannel
       });
       setSmsSuccess('Configurations updated successfully.');
     } catch (err: any) {
       setSmsError(err.message || 'Failed to update configurations.');
     } finally {
       setSmsLoading(false);
+    }
+  };
+
+  const handleSendTest = async () => {
+    setSmsError('');
+    setSmsSuccess('');
+    setTestLoading(true);
+    try {
+      const res = await sendTestNotificationAction();
+      if (res.success) {
+        setSmsSuccess(`Test notification triggered successfully via ${notificationChannel.toUpperCase()}.`);
+      } else {
+        setSmsError(`Test notification failed: ${res.error || 'Unknown error'}`);
+      }
+    } catch (err: any) {
+      setSmsError(err.message || 'Failed to trigger test notification.');
+    } finally {
+      setTestLoading(false);
     }
   };
 
@@ -388,6 +412,18 @@ export default function SettingsView() {
               )}
 
               <div className="space-y-1">
+                <label className="text-xs font-medium text-text-main/70 ml-0.5">Notification Channel</label>
+                <select
+                  value={notificationChannel}
+                  onChange={e => setNotificationChannel(e.target.value as 'sms' | 'whatsapp')}
+                  className="w-full bg-background border border-border-main rounded-xl py-2 px-3 focus:outline-none focus:ring-2 focus:ring-accent sm:text-xs text-text-main font-semibold cursor-pointer"
+                >
+                  <option value="sms">SMS Channel (BlazeTech Scope SMS)</option>
+                  <option value="whatsapp">WhatsApp Channel (Evolution WhatsApp API)</option>
+                </select>
+              </div>
+
+              <div className="space-y-1">
                 <label className="text-xs font-medium text-text-main/70 ml-0.5">Admin Alert Phone</label>
                 <input
                   type="text"
@@ -400,17 +436,19 @@ export default function SettingsView() {
                 <p className="text-[9px] text-muted-main">Alert messages will be sent to this phone number</p>
               </div>
 
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-text-main/70 ml-0.5">Sender ID</label>
-                <input
-                  type="text"
-                  required
-                  value={senderId}
-                  onChange={e => setSenderId(e.target.value)}
-                  className="w-full bg-background border border-border-main rounded-xl py-2 px-3 focus:outline-none focus:ring-2 focus:ring-accent sm:text-xs text-text-main font-mono"
-                  placeholder="e.g. BLAZETECH"
-                />
-              </div>
+              {notificationChannel === 'sms' && (
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-text-main/70 ml-0.5">Sender ID</label>
+                  <input
+                    type="text"
+                    required
+                    value={senderId}
+                    onChange={e => setSenderId(e.target.value)}
+                    className="w-full bg-background border border-border-main rounded-xl py-2 px-3 focus:outline-none focus:ring-2 focus:ring-accent sm:text-xs text-text-main font-mono"
+                    placeholder="e.g. BLAZETECH"
+                  />
+                </div>
+              )}
 
               <div className="space-y-1">
                 <label className="text-xs font-medium text-text-main/70 ml-0.5">Pesafrix Settlement Till</label>
@@ -460,20 +498,37 @@ export default function SettingsView() {
                 </div>
               </div>
 
-              <button
-                type="submit"
-                disabled={smsLoading || !adminPhone || !senderId}
-                className="w-full mt-2 py-2 px-4 bg-accent hover:opacity-90 text-panel rounded-xl text-xs font-semibold transition-all focus:outline-none disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
-              >
-                {smsLoading ? (
-                  <>
-                    <RefreshCw className="animate-spin text-panel" size={14} />
-                    <span>Saving configurations...</span>
-                  </>
-                ) : (
-                  <span>Save Configurations</span>
-                )}
-              </button>
+              <div className="flex gap-2.5 mt-2">
+                <button
+                  type="submit"
+                  disabled={smsLoading || testLoading || !adminPhone || (notificationChannel === 'sms' && !senderId)}
+                  className="flex-1 py-2 px-4 bg-accent hover:opacity-90 text-panel rounded-xl text-xs font-semibold transition-all focus:outline-none disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  {smsLoading ? (
+                    <>
+                      <RefreshCw className="animate-spin text-panel" size={14} />
+                      <span>Saving configurations...</span>
+                    </>
+                  ) : (
+                    <span>Save Configurations</span>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSendTest}
+                  disabled={smsLoading || testLoading || !adminPhone}
+                  className="py-2 px-4 bg-panel hover:bg-background border border-border-main text-text-main rounded-xl text-xs font-semibold transition-all focus:outline-none disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer shadow-sm"
+                >
+                  {testLoading ? (
+                    <>
+                      <RefreshCw className="animate-spin" size={14} />
+                      <span>Testing...</span>
+                    </>
+                  ) : (
+                    <span>Send Test</span>
+                  )}
+                </button>
+              </div>
             </form>
           </div>
         </div>
