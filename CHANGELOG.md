@@ -5,6 +5,20 @@ All notable changes to the Skylink Bundlefasta Dashboard project will be documen
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to Semantic Versioning.
 
+## [1.5.1] - 2026-06-13
+
+### Fixed / Verification
+- Verified local build passes successfully (Next.js 15, TypeScript) with all 1.5.0 features intact.
+- Re-triggered Vercel deployment via fresh commit to ensure all 1.5.0 changes are visible on production (dashboard cards, services page, analytics updates, settings notification channel).
+- Confirmed no build errors or TypeScript type errors in any modified file.
+
+### Summary of deployed features (1.5.0):
+- **Dashboard** → Updated KPI cards: Current Balance (with inline refresh), Incoming Today, Outgoing Today, Pesatrix Today (In/Out), BingwaZone Today (In/Out), Alert Notifications stats.
+- **Dashboard Charts** → Service Revenue Trend (7-day Area), Service Volumes bar, Inflow Share by Module (Pie), Historical Balance Line.
+- **Services Page** → Full BingwaZone & Pesatrix portal with KPI cards, module inbound revenue chart + list, transaction type distribution, recent B2C payout log.
+- **Analytics Page** → Multi-dimensional advanced filters (Date, Service, Module, Direction, Tx Type, Reconciliation, Status, Search), Cashflow trend area, Module share pie, Pesatrix Activation panel, Revenue by Payment Type & Source charts.
+- **Settings** → Notification channel selector (SMS / WhatsApp), Admin Alert Phone number input, SMS Sender ID (SMS only), Incoming/Outgoing alert toggles, Send Test notification button.
+
 ## [1.5.0] - 2026-06-13
 
 ### Added
