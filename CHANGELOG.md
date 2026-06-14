@@ -5,6 +5,15 @@ All notable changes to the Skylink Bundlefasta Dashboard project will be documen
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to Semantic Versioning.
 
+## [1.12.1] - 2026-06-14
+
+### Fixed
+- **[Vercel Deployment] Certificate file not found at `/var/task/ProductionCertificate.cer`:**
+  - **Root cause:** Vercel's serverless functions run with CWD `/var/task/`. Static files placed in the project root are not automatically bundled into the Lambda deployment package. `process.cwd()` resolves to `/var/task/` at runtime, so `fs.readFileSync` failed to find the `.cer` file.
+  - **Fix:** Added `outputFileTracingIncludes` to [`next.config.ts`](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/next.config.ts) to explicitly instruct Next.js/Vercel to trace and bundle `ProductionCertificate.cer` and `SandboxCertificate.cer` into all `/api/**` serverless function bundles.
+  - **Alternative:** The `DARAJA_CERTIFICATE` env var (set to the full PEM string) bypasses file loading entirely and is the recommended approach for production secrets.
+  - **Note:** The `.cer` file in the repository expired in March 2018 — a fresh certificate must be downloaded from the [Safaricom Daraja Portal](https://developer.safaricom.co.ke/) for the API to accept the `SecurityCredential`.
+
 ## [1.12.0] - 2026-06-14
 
 ### Fixed
