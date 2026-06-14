@@ -1,123 +1,231 @@
 import { NextResponse } from 'next/server';
-import { verifyWebhookHmac } from '@/lib/webhooks/verify-hmac';
+import crypto from 'crypto';
 import { reconcileWebhookTransaction } from '@/lib/services/reconciliation';
 import { normalizeKenyanPhone } from '@/lib/utils/phone';
 import { logSystemAudit } from '@/lib/repositories/audit';
+
+export const runtime = 'nodejs';
 
 export async function POST(req: Request) {
   try {
     const signature = req.headers.get('X-Pesatrix-Signature');
     const eventHeader = req.headers.get('X-Pesatrix-Event');
 
+    // Reject missing signature or event header
     if (!signature || !eventHeader) {
       await logSystemAudit('WEBHOOK_SIGNATURE_REJECTED', {
         source_system: 'pesatrix',
         reason: 'Missing signature or event header'
       });
-      return new NextResponse('Missing required headers', { status: 401 });
+      return NextResponse.json(
+        { success: false, error: 'Missing required headers' },
+        { status: 401 }
+      );
     }
 
-    // Read raw body exactly once for timing safe verification
-    const rawBody = await req.text();
-    const secret = process.env.PESATRIX_WEBHOOK_SECRET;
+    // Require signature to be exactly a 64-character hexadecimal SHA-256 digest
+    if (!/^[a-fA-F0-9]{64}$/.test(signature)) {
+      await logSystemAudit('WEBHOOK_SIGNATURE_REJECTED', {
+        source_system: 'pesatrix',
+        reason: 'Invalid signature format (not a 64-character hex)'
+      });
+      return NextResponse.json(
+        { success: false, error: 'Invalid Pesatrix webhook signature' },
+        { status: 403 }
+      );
+    }
 
-    if (!verifyWebhookHmac(rawBody, signature, secret, 'pesatrix')) {
+    // Read raw body exactly once
+    let rawBody: string;
+    try {
+      rawBody = await req.text();
+    } catch (err: any) {
+      return NextResponse.json(
+        { success: false, error: 'Failed to read request body' },
+        { status: 400 }
+      );
+    }
+
+    // Require PESATRIX_WEBHOOK_SECRET
+    const secret = process.env.PESATRIX_WEBHOOK_SECRET;
+    if (!secret) {
+      console.error('[Pesatrix Webhook] PESATRIX_WEBHOOK_SECRET is not configured');
+      return NextResponse.json(
+        { success: false, error: 'Internal Server Error' },
+        { status: 500 }
+      );
+    }
+
+    // Compute expected signature
+    const computedSignature = crypto
+      .createHmac('sha256', secret)
+      .update(rawBody, 'utf8')
+      .digest('hex');
+
+    // Timing safe comparison using Buffers
+    const providedBuffer = Buffer.from(signature, 'hex');
+    const expectedBuffer = Buffer.from(computedSignature, 'hex');
+
+    if (providedBuffer.length !== expectedBuffer.length || !crypto.timingSafeEqual(providedBuffer, expectedBuffer)) {
       await logSystemAudit('WEBHOOK_SIGNATURE_REJECTED', {
         source_system: 'pesatrix',
         reason: 'HMAC signature verification failed'
       });
-      return new NextResponse('Invalid signature', { status: 401 });
+      return NextResponse.json(
+        { success: false, error: 'Invalid Pesatrix webhook signature' },
+        { status: 403 }
+      );
     }
 
-    // Parse JSON only after signature verification
+    // Parse JSON only after signature verification is valid
     let payload: any;
     try {
       payload = JSON.parse(rawBody);
     } catch (parseErr) {
-      return new NextResponse('Invalid JSON payload', { status: 400 });
+      return NextResponse.json(
+        { success: false, error: 'Invalid JSON payload' },
+        { status: 400 }
+      );
     }
 
-    // 1. Basic validation
-    const eventType = payload.event;
-    const platform = payload.platform;
-
-    if (platform !== 'pesatrix') {
-      return new NextResponse('Invalid platform field', { status: 400 });
+    // Payload validation
+    if (!payload || typeof payload !== 'object') {
+      return NextResponse.json(
+        { success: false, error: 'Invalid Pesatrix webhook payload' },
+        { status: 400 }
+      );
     }
 
-    if (eventHeader !== eventType) {
-      return new NextResponse('Header event type and payload event type mismatch', { status: 400 });
+    const { event, transaction_id, amount, phone, platform, timestamp, reference_id, user_id } = payload;
+
+    // Reject unsupported event types
+    if (event !== 'activation' && event !== 'withdrawal') {
+      return NextResponse.json(
+        { success: false, error: 'Invalid Pesatrix webhook payload' },
+        { status: 400 }
+      );
     }
 
-    if (eventType !== 'activation' && eventType !== 'withdrawal') {
-      return new NextResponse('Unsupported event type', { status: 400 });
+    // Reject mismatch between event header and body
+    if (eventHeader !== event) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid Pesatrix webhook payload' },
+        { status: 400 }
+      );
     }
 
-    if (!payload.amount || payload.amount <= 0) {
-      return new NextResponse('Invalid or non-positive amount', { status: 400 });
+    // Platform must equal pesatrix
+    if (typeof platform !== 'string' || platform.toLowerCase() !== 'pesatrix') {
+      return NextResponse.json(
+        { success: false, error: 'Invalid Pesatrix webhook payload' },
+        { status: 400 }
+      );
     }
 
-    if (!payload.reference_id || !payload.user_id || !payload.transaction_id) {
-      return new NextResponse('Missing required identifier fields', { status: 400 });
+    // Amount must be a positive number
+    if (typeof amount !== 'number' || isNaN(amount) || amount <= 0) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid Pesatrix webhook payload' },
+        { status: 400 }
+      );
     }
 
-    // 2. Normalize phone
-    let normalizedPhone = null;
+    // Identifier fields must be non-empty strings
+    if (
+      typeof transaction_id !== 'string' || transaction_id.trim() === '' ||
+      typeof reference_id !== 'string' || reference_id.trim() === '' ||
+      typeof user_id !== 'string' || user_id.trim() === ''
+    ) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid Pesatrix webhook payload' },
+        { status: 400 }
+      );
+    }
+
+    // Phone number must be normalized
+    if (typeof phone !== 'string' || phone.trim() === '') {
+      return NextResponse.json(
+        { success: false, error: 'Invalid Pesatrix webhook payload' },
+        { status: 400 }
+      );
+    }
+
+    let normalizedPhone: string;
     try {
-      if (payload.phone) {
-        normalizedPhone = normalizeKenyanPhone(payload.phone);
-      }
-    } catch (phoneErr: any) {
-      return new NextResponse(`Phone normalization failed: ${phoneErr.message}`, { status: 400 });
+      normalizedPhone = normalizeKenyanPhone(phone);
+    } catch (phoneErr) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid Pesatrix webhook payload' },
+        { status: 400 }
+      );
     }
 
-    const receipt = String(payload.transaction_id).trim().toUpperCase();
+    // Valid ISO timestamp check
+    if (typeof timestamp !== 'string' || isNaN(Date.parse(timestamp))) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid Pesatrix webhook payload' },
+        { status: 400 }
+      );
+    }
 
-    // 3. Generate deterministic event key
-    const eventKey = `pesatrix:${eventType}:${payload.reference_id}`;
+    // Generate deterministic event key: pesatrix:<event>:<transaction_id>
+    const eventKey = `pesatrix:${event}:${transaction_id}`;
 
-    // 4. Call reconciliation
+    // Call reconciliation database driver
     const result = await reconcileWebhookTransaction({
       source_system: 'pesatrix',
       event_key: eventKey,
-      event_type: eventType,
+      event_type: event,
       schema_version: null,
       raw_payload_string: rawBody,
       raw_payload: payload,
-      occurred_at: payload.timestamp || null,
-      tx_direction: eventType === 'activation' ? 'IN' : 'OUT',
-      tx_type: eventType === 'activation' ? 'activation' : 'withdrawal',
-      payment_type: eventType === 'activation' ? 'activation' : 'withdrawal',
-      product_stream: eventType === 'activation' ? 'activation' : 'withdrawal',
-      module: eventType === 'activation' ? 'account_activation' : 'wallet',
-      service_source: eventType === 'activation' ? 'pesatrix_activation' : 'pesatrix_wallet_withdrawal',
-      amount: Number(payload.amount),
-      payer_phone: eventType === 'activation' ? normalizedPhone : null,
-      recipient_phone: eventType === 'withdrawal' ? normalizedPhone : null,
-      receipt,
-      external_reference_id: payload.reference_id,
-      external_user_id: payload.user_id,
-      completed_at: payload.timestamp || null,
+      occurred_at: timestamp,
+      tx_direction: event === 'activation' ? 'IN' : 'OUT',
+      tx_type: event === 'activation' ? 'activation' : 'withdrawal',
+      payment_type: event === 'activation' ? 'activation' : 'withdrawal',
+      product_stream: event === 'activation' ? 'activation' : 'withdrawal',
+      module: event === 'activation' ? 'account_activation' : 'wallet',
+      service_source: event === 'activation' ? 'pesatrix_activation' : 'pesatrix_wallet_withdrawal',
+      amount: Number(amount),
+      payer_phone: event === 'activation' ? normalizedPhone : null,
+      recipient_phone: event === 'withdrawal' ? normalizedPhone : null,
+      receipt: transaction_id,
+      external_reference_id: reference_id,
+      external_user_id: user_id,
+      completed_at: timestamp,
       metadata: {
-        timestamp: payload.timestamp,
-        user_id: payload.user_id
+        timestamp,
+        user_id
       }
     });
 
     if (result.status === 'idempotency_conflict') {
-      return new NextResponse(result.error, { status: 409 });
+      return NextResponse.json(
+        { success: false, error: result.error || 'Idempotency conflict' },
+        { status: 409 }
+      );
     }
+
     if (result.status === 'error') {
-      return new NextResponse(result.error, { status: 500 });
+      return NextResponse.json(
+        { success: false, error: result.error || 'Database processing failure' },
+        { status: 500 }
+      );
     }
 
     return NextResponse.json({
-      received: true,
-      duplicate: result.duplicate
+      success: true,
+      status: result.duplicate ? 'duplicate' : 'processed',
+      provider: 'pesatrix',
+      event,
+      event_key: eventKey
     });
 
   } catch (err: any) {
     console.error('[Pesatrix Webhook Route Error]:', err);
-    return new NextResponse('Internal Server Error', { status: 500 });
+    return NextResponse.json(
+      { success: false, error: 'Internal Server Error' },
+      { status: 500 }
+    );
   }
 }

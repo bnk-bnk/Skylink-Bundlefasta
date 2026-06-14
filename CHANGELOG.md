@@ -5,6 +5,17 @@ All notable changes to the Skylink Bundlefasta Dashboard project will be documen
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to Semantic Versioning.
 
+## [1.10.0] - 2026-06-14
+
+### Added
+- Created a secure webhook export module `src/lib/paybill-webhook.ts` that implements `sendPaybillWebhook` to dispatch activation and withdrawal events to the Pesatrix application signed with a lowercase hexadecimal HMAC-SHA256 signature.
+- Added comprehensive unit tests in `tests/webhooks.test.ts` for verifying Pesatrix webhook receiver's signature checks, JSON/payload validation constraints, and duplication processing.
+
+### Fixed
+- Re-implemented the Pesatrix webhook receiver route in `src/app/api/webhooks/pesatrix/route.ts` with strict timing-safe signature checking, body parsing only after signature check, and custom payload schema validation.
+- Integrated payment confirmation webhook export dispatching inside the C2B (`src/app/api/daraja/callback/c2b/route.ts`) and B2C (`src/app/api/daraja/callback/b2c/route.ts`) callbacks.
+- Added database transaction deduplication checks inside the Safaricom callback routes to prevent double-inserting transactions when webhooks are received out-of-order.
+
 ## [1.9.0] - 2026-06-14
 
 ### Changed

@@ -8,6 +8,7 @@ import { normalizeKenyanPhone } from '../src/lib/utils/phone';
 import { buildAlertMessage } from '../src/lib/notifications/send-transaction-alert';
 import { getReadableLabel } from '../src/lib/utils/labels';
 import { POST } from '../src/app/webhooks/bingwaone/route';
+import { POST as pesatrixPOST } from '../src/app/api/webhooks/pesatrix/route';
 
 // Programmatically load .env for DB integration tests
 try {
@@ -33,6 +34,7 @@ try {
 
 // Make sure BINGWAONE_WEBHOOK_SECRET is set to secret123 for signature tests
 process.env.BINGWAONE_WEBHOOK_SECRET = 'secret123';
+process.env.PESATRIX_WEBHOOK_SECRET = 'test_secret_123';
 
 const BZ_SECRET = 'test_bz_secret_value_123';
 const PT_SECRET = 'test_pt_secret_value_456';
@@ -379,3 +381,233 @@ test('Route Handler - Accept and Process Wallet Withdrawal Webhook', async () =>
   assert.strictEqual(dataDuplicate.success, true);
   assert.strictEqual(dataDuplicate.status, 'duplicate');
 });
+
+// ==========================================
+// PESATRIX WEBHOOK RECEIVER ROUTE TESTS
+// ==========================================
+
+test('Pesatrix Route Handler - Reject Missing Headers', async () => {
+  const req = new Request('http://localhost/api/webhooks/pesatrix', {
+    method: 'POST',
+    body: '{"test":true}'
+  });
+
+  const res = await pesatrixPOST(req);
+  assert.strictEqual(res.status, 401);
+  const data = await res.json();
+  assert.strictEqual(data.success, false);
+  assert.match(data.error, /Missing required headers/);
+});
+
+test('Pesatrix Route Handler - Reject Invalid Signature Format', async () => {
+  const req = new Request('http://localhost/api/webhooks/pesatrix', {
+    method: 'POST',
+    headers: {
+      'X-Pesatrix-Event': 'activation',
+      'X-Pesatrix-Signature': 'invalid_format'
+    },
+    body: '{"test":true}'
+  });
+
+  const res = await pesatrixPOST(req);
+  assert.strictEqual(res.status, 403);
+  const data = await res.json();
+  assert.strictEqual(data.success, false);
+  assert.match(data.error, /Invalid Pesatrix webhook signature/);
+});
+
+test('Pesatrix Route Handler - Reject Invalid Signature', async () => {
+  const body = JSON.stringify({ event: 'activation' });
+  const req = new Request('http://localhost/api/webhooks/pesatrix', {
+    method: 'POST',
+    headers: {
+      'X-Pesatrix-Event': 'activation',
+      'X-Pesatrix-Signature': 'a'.repeat(64)
+    },
+    body
+  });
+
+  const res = await pesatrixPOST(req);
+  assert.strictEqual(res.status, 403);
+  const data = await res.json();
+  assert.strictEqual(data.success, false);
+  assert.match(data.error, /Invalid Pesatrix webhook signature/);
+});
+
+test('Pesatrix Route Handler - Reject Malformed JSON', async () => {
+  process.env.PESATRIX_WEBHOOK_SECRET = 'test_secret_123';
+  const body = '{"test":true, malformed';
+  const signature = crypto.createHmac('sha256', 'test_secret_123').update(body).digest('hex');
+
+  const req = new Request('http://localhost/api/webhooks/pesatrix', {
+    method: 'POST',
+    headers: {
+      'X-Pesatrix-Event': 'activation',
+      'X-Pesatrix-Signature': signature
+    },
+    body
+  });
+
+  const res = await pesatrixPOST(req);
+  assert.strictEqual(res.status, 400);
+  const data = await res.json();
+  assert.strictEqual(data.success, false);
+  assert.match(data.error, /Invalid JSON payload/);
+});
+
+test('Pesatrix Route Handler - Reject Header Event Mismatch', async () => {
+  process.env.PESATRIX_WEBHOOK_SECRET = 'test_secret_123';
+  const body = JSON.stringify({
+    event: 'activation',
+    transaction_id: 'TX123456789',
+    amount: 1500.00,
+    phone: '254712345678',
+    platform: 'pesatrix',
+    timestamp: '2026-06-14T17:48:28Z',
+    reference_id: 'REF-98765',
+    user_id: 'usr_abcd1234'
+  });
+  const signature = crypto.createHmac('sha256', 'test_secret_123').update(body).digest('hex');
+
+  const req = new Request('http://localhost/api/webhooks/pesatrix', {
+    method: 'POST',
+    headers: {
+      'X-Pesatrix-Event': 'withdrawal',
+      'X-Pesatrix-Signature': signature
+    },
+    body
+  });
+
+  const res = await pesatrixPOST(req);
+  assert.strictEqual(res.status, 400);
+  const data = await res.json();
+  assert.strictEqual(data.success, false);
+  assert.match(data.error, /Invalid Pesatrix webhook payload/);
+});
+
+test('Pesatrix Route Handler - Reject Invalid Amount', async () => {
+  process.env.PESATRIX_WEBHOOK_SECRET = 'test_secret_123';
+  const body = JSON.stringify({
+    event: 'activation',
+    transaction_id: 'TX123456789',
+    amount: -100.00,
+    phone: '254712345678',
+    platform: 'pesatrix',
+    timestamp: '2026-06-14T17:48:28Z',
+    reference_id: 'REF-98765',
+    user_id: 'usr_abcd1234'
+  });
+  const signature = crypto.createHmac('sha256', 'test_secret_123').update(body).digest('hex');
+
+  const req = new Request('http://localhost/api/webhooks/pesatrix', {
+    method: 'POST',
+    headers: {
+      'X-Pesatrix-Event': 'activation',
+      'X-Pesatrix-Signature': signature
+    },
+    body
+  });
+
+  const res = await pesatrixPOST(req);
+  assert.strictEqual(res.status, 400);
+  const data = await res.json();
+  assert.strictEqual(data.success, false);
+  assert.match(data.error, /Invalid Pesatrix webhook payload/);
+});
+
+test('Pesatrix Route Handler - Reject Invalid Phone Number', async () => {
+  process.env.PESATRIX_WEBHOOK_SECRET = 'test_secret_123';
+  const body = JSON.stringify({
+    event: 'activation',
+    transaction_id: 'TX123456789',
+    amount: 1500.00,
+    phone: 'invalid-phone',
+    platform: 'pesatrix',
+    timestamp: '2026-06-14T17:48:28Z',
+    reference_id: 'REF-98765',
+    user_id: 'usr_abcd1234'
+  });
+  const signature = crypto.createHmac('sha256', 'test_secret_123').update(body).digest('hex');
+
+  const req = new Request('http://localhost/api/webhooks/pesatrix', {
+    method: 'POST',
+    headers: {
+      'X-Pesatrix-Event': 'activation',
+      'X-Pesatrix-Signature': signature
+    },
+    body
+  });
+
+  const res = await pesatrixPOST(req);
+  assert.strictEqual(res.status, 400);
+  const data = await res.json();
+  assert.strictEqual(data.success, false);
+  assert.match(data.error, /Invalid Pesatrix webhook payload/);
+});
+
+test('Pesatrix Route Handler - Ingestion and Duplicate Handling', async () => {
+  const originalSecret = process.env.PESATRIX_WEBHOOK_SECRET;
+  const originalBwUrl = process.env.PAYBILL_DASHBOARD_WEBHOOK_URL;
+  const originalBwSecret = process.env.PAYBILL_DASHBOARD_WEBHOOK_SECRET;
+  
+  try {
+    const testSecret = 'test_secret_value_123';
+    process.env.PESATRIX_WEBHOOK_SECRET = testSecret;
+    process.env.PAYBILL_DASHBOARD_WEBHOOK_URL = 'http://localhost/api/mock-endpoint';
+    process.env.PAYBILL_DASHBOARD_WEBHOOK_SECRET = testSecret;
+
+    const txId = 'TX_TEST_' + Math.floor(100000 + Math.random() * 900000);
+    const body = JSON.stringify({
+      event: 'activation',
+      transaction_id: txId,
+      amount: 1500.00,
+      phone: '254712345678',
+      platform: 'pesatrix',
+      timestamp: new Date().toISOString(),
+      reference_id: 'REF_TEST_123',
+      user_id: 'usr_test_abcd'
+    });
+
+    const signature = crypto.createHmac('sha256', testSecret).update(body).digest('hex');
+
+    const req = new Request('http://localhost/api/webhooks/pesatrix', {
+      method: 'POST',
+      headers: {
+        'X-Pesatrix-Event': 'activation',
+        'X-Pesatrix-Signature': signature
+      },
+      body
+    });
+
+    const res = await pesatrixPOST(req);
+    assert.strictEqual(res.status, 200);
+    const data = await res.json();
+    assert.strictEqual(data.success, true);
+    assert.strictEqual(data.status, 'processed');
+    assert.strictEqual(data.event, 'activation');
+    assert.strictEqual(data.event_key, `pesatrix:activation:${txId}`);
+
+    // Re-send to verify duplicate handling
+    const reqDuplicate = new Request('http://localhost/api/webhooks/pesatrix', {
+      method: 'POST',
+      headers: {
+        'X-Pesatrix-Event': 'activation',
+        'X-Pesatrix-Signature': signature
+      },
+      body
+    });
+
+    const resDuplicate = await pesatrixPOST(reqDuplicate);
+    assert.strictEqual(resDuplicate.status, 200);
+    const dataDuplicate = await resDuplicate.json();
+    assert.strictEqual(dataDuplicate.success, true);
+    assert.strictEqual(dataDuplicate.status, 'duplicate');
+    assert.strictEqual(dataDuplicate.event_key, `pesatrix:activation:${txId}`);
+
+  } finally {
+    process.env.PESATRIX_WEBHOOK_SECRET = originalSecret;
+    process.env.PAYBILL_DASHBOARD_WEBHOOK_URL = originalBwUrl;
+    process.env.PAYBILL_DASHBOARD_WEBHOOK_SECRET = originalBwSecret;
+  }
+});
+

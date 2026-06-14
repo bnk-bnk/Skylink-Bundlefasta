@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/server';
 import { createTransaction } from '@/lib/repositories/transactions';
 import { logSystemAudit } from '@/lib/repositories/audit';
 import { triggerSmsNotification } from '@/lib/sms/send-sms';
+import { triggerPesatrixWebhookForTransaction } from '@/lib/paybill-webhook';
 
 export async function POST(req: Request) {
   try {
@@ -42,16 +43,54 @@ export async function POST(req: Request) {
 
       const mpesaReceipt = TransactionID || `B2C_${ConversationID.slice(-6)}`;
 
-      await createTransaction({
-        direction: 'OUT',
-        transaction_type: 'B2C',
-        phone_number: b2cReq.phone_number,
-        amount,
-        mpesa_receipt: mpesaReceipt,
-        status: 'SUCCESS',
-        description: b2cReq.remarks || 'B2C Payout Completed successfully',
-        raw_payload: payload,
-      });
+      // Try to find if a Pesatrix withdrawal transaction exists with the same phone and amount
+      const { data: existingTx } = await adminSupabase
+        .from('transactions')
+        .select('*')
+        .eq('source_system', 'pesatrix')
+        .eq('direction', 'OUT')
+        .eq('amount', amount)
+        .or(`recipient_phone.eq.${b2cReq.phone_number},phone_number.eq.${b2cReq.phone_number}`)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      let transaction;
+      if (existingTx) {
+        // Match and update
+        const { data: updatedTx, error: updateErr } = await adminSupabase
+          .from('transactions')
+          .update({
+            status: 'SUCCESS',
+            mpesa_receipt: mpesaReceipt,
+            raw_payload: {
+              ...existingTx.raw_payload,
+              b2c_callback: payload
+            },
+            reconciliation_status: 'matched',
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', existingTx.id)
+          .select()
+          .single();
+        
+        if (updateErr) {
+          console.error('Failed to update existing B2C transaction:', updateErr);
+        }
+        transaction = updatedTx;
+      } else {
+        // Create new transaction
+        transaction = await createTransaction({
+          direction: 'OUT',
+          transaction_type: 'B2C',
+          phone_number: b2cReq.phone_number,
+          amount,
+          mpesa_receipt: mpesaReceipt,
+          status: 'SUCCESS',
+          description: b2cReq.remarks || 'B2C Payout Completed successfully',
+          raw_payload: payload,
+        });
+      }
 
       // Trigger SMS alerts in background (side-effect)
       triggerSmsNotification({
@@ -62,6 +101,13 @@ export async function POST(req: Request) {
         phone_number: b2cReq.phone_number,
         mpesa_receipt: mpesaReceipt
       });
+
+      // If transaction is from Pesatrix, notify the Pesatrix application
+      if (transaction && transaction.source_system === 'pesatrix') {
+        triggerPesatrixWebhookForTransaction(transaction.id).catch(err => {
+          console.error('[B2C Callback] Failed triggering Pesatrix webhook:', err);
+        });
+      }
 
       await logSystemAudit('B2C_CALLBACK_SUCCESS', {
         conversationId: ConversationID,

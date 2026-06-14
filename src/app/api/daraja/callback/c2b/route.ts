@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/server';
 import { logSystemAudit } from '@/lib/repositories/audit';
 import { triggerSettlementRule } from '@/lib/repositories/b2b';
 import { triggerSmsNotification } from '@/lib/sms/send-sms';
+import { triggerPesatrixWebhookForTransaction } from '@/lib/paybill-webhook';
 
 export async function POST(req: Request) {
   try {
@@ -27,22 +28,63 @@ export async function POST(req: Request) {
     const reference = BillRefNumber ? String(BillRefNumber).trim() : null;
     const phone = MSISDN ? String(MSISDN).trim() : null;
 
-    // Create the incoming C2B transaction
-    const transaction = await createTransaction({
-      direction: 'IN',
-      transaction_type: 'C2B',
-      account_reference: reference,
-      phone_number: phone,
-      amount,
-      mpesa_receipt: TransID,
-      status: 'SUCCESS',
-      description: `C2B PayBill payment - Type: ${TransactionType || 'Pay Bill'}`,
-      raw_payload: payload,
-    });
+    const adminSupabase = createAdminClient();
+
+    // 1. Check if transaction with the same mpesa_receipt already exists (inserted by webhook first)
+    const { data: existingTx, error: txCheckErr } = await adminSupabase
+      .from('transactions')
+      .select('*')
+      .eq('mpesa_receipt', TransID)
+      .maybeSingle();
+
+    let transaction;
+    if (existingTx) {
+      // Reconcile and update status to SUCCESS
+      const { data: updatedTx, error: updateErr } = await adminSupabase
+        .from('transactions')
+        .update({
+          status: 'SUCCESS',
+          raw_payload: {
+            ...existingTx.raw_payload,
+            c2b_callback: payload
+          },
+          reconciliation_status: 'matched',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', existingTx.id)
+        .select()
+        .single();
+      
+      if (updateErr) {
+        console.error('Failed to update existing C2B transaction:', updateErr);
+        throw updateErr;
+      }
+      transaction = updatedTx;
+    } else {
+      // Create new transaction
+      transaction = await createTransaction({
+        direction: 'IN',
+        transaction_type: 'C2B',
+        account_reference: reference,
+        phone_number: phone,
+        amount,
+        mpesa_receipt: TransID,
+        status: 'SUCCESS',
+        description: `C2B PayBill payment - Type: ${TransactionType || 'Pay Bill'}`,
+        raw_payload: payload,
+      });
+    }
 
     // Trigger settlement rules calculation
     if (transaction && transaction.id) {
       await triggerSettlementRule(transaction.id, transaction.account_reference, transaction.amount);
+      
+      // If transaction is from Pesatrix, notify the Pesatrix application
+      if (transaction.source_system === 'pesatrix') {
+        triggerPesatrixWebhookForTransaction(transaction.id).catch(err => {
+          console.error('[C2B Callback] Failed triggering Pesatrix webhook:', err);
+        });
+      }
     }
 
     // Trigger SMS alerts in background (side-effect)
