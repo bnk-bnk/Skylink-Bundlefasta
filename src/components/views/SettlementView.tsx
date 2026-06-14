@@ -398,7 +398,7 @@ export default function SettlementView() {
                     value={accountReference}
                     onChange={(e) => setAccountReference(e.target.value.toUpperCase())}
                     className="w-full text-xs py-2 px-3 border border-border-main rounded-lg bg-background font-mono font-bold"
-                    placeholder="e.g. PESATRIX, BINGWAZONE"
+                    placeholder="e.g. PESATRIX, BINGWAONE"
                   />
                 </div>
 

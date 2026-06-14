@@ -5,6 +5,23 @@ All notable changes to the Skylink Bundlefasta Dashboard project will be documen
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to Semantic Versioning.
 
+## [1.7.0] - 2026-06-14
+
+### Added
+- Added `metadata` jsonb column to the `transactions` table in Supabase via SQL migration, resolving webhook reconciliation RPC failures.
+- Added `isTest?: boolean` parameter to `AlertParams` in `src/lib/notifications/send-transaction-alert.ts` to bypass idempotency/deduplication checks for test notification actions.
+
+### Fixed
+- Fixed WhatsApp notification number formatting in `src/lib/notifications/providers/evolution-whatsapp.ts` to convert Kenyan phone numbers (e.g. `07...`) to the international format (`254...`) required by the Evolution API.
+- Fixed settings page test notification failures by ensuring that when sending a test notification, the deduplication key is unique and skips existing check.
+
+### Changed / Renamed
+- Renamed the service/word `bingwazone` to `bingwaone` across all directories, files, database records, environment variables, headers, and UI views.
+- Moved and renamed the webhook directories to `src/app/webhooks/bingwaone` and `src/app/api/webhooks/bingwaone`.
+- Updated webhook headers check to support `X-BingwaOne-Signature` and `X-BingwaOne-Event` with fallbacks to the old `X-BingwaZone-*` headers.
+- Updated environment variable config in `.env` and `.env.local` to support `BINGWAONE_WEBHOOK_SECRET` with fallback to `BINGWAZONE_WEBHOOK_SECRET`.
+- Updated test suite `tests/webhooks.test.ts` to test the new `bingwaone` webhook endpoint and headers.
+
 ## [1.6.0] - 2026-06-14
 
 ### Added

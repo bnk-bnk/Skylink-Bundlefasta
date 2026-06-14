@@ -9,7 +9,7 @@ export function verifyWebhookHmac(
   rawBody: string,
   signatureHeader: string | null | undefined,
   secret: string | null | undefined,
-  format: 'bingwazone' | 'pesatrix'
+  format: 'bingwaone' | 'bingwazone' | 'pesatrix'
 ): boolean {
   if (!secret) {
     console.error(`[HMAC Validation] Error: Secret key is not configured.`);
@@ -22,7 +22,7 @@ export function verifyWebhookHmac(
 
   // Extract raw hex signature based on format rules
   let providedHex = '';
-  if (format === 'bingwazone') {
+  if (format === 'bingwaone' || format === 'bingwazone') {
     // Format: sha256=<64 lowercase/uppercase hex characters>
     if (!signatureHeader.startsWith('sha256=')) {
       return false;

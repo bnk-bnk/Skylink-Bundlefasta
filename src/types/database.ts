@@ -86,6 +86,7 @@ export interface Database {
           status: TransactionStatus;
           description: string | null;
           raw_payload: any | null;
+          metadata: any | null;
           created_at: string;
           updated_at: string;
           source_system: string;
@@ -126,6 +127,7 @@ export interface Database {
           status?: TransactionStatus;
           description?: string | null;
           raw_payload?: any | null;
+          metadata?: any | null;
           created_at?: string;
           updated_at?: string;
           source_system?: string;
@@ -166,6 +168,7 @@ export interface Database {
           status?: TransactionStatus;
           description?: string | null;
           raw_payload?: any | null;
+          metadata?: any | null;
           created_at?: string;
           updated_at?: string;
           source_system?: string;

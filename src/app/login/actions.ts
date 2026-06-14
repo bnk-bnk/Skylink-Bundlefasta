@@ -72,7 +72,7 @@ export async function demoLoginAction() {
     // 4. Seed `product_sources` table
     const sources = [
       { name: 'Pesatrix', reference: 'PESATRIX' },
-      { name: 'BingwaZone', reference: 'BINGWAZONE' },
+      { name: 'BingwaOne', reference: 'BINGWAONE' },
       { name: 'Poster', reference: 'POSTER' },
       { name: 'Minisite', reference: 'MINISITE' }
     ];
@@ -117,8 +117,8 @@ export async function demoLoginAction() {
       {
         direction: 'IN',
         transaction_type: 'STK',
-        source_id: sourceMap['BINGWAZONE'],
-        account_reference: 'BINGWAZONE',
+        source_id: sourceMap['BINGWAONE'],
+        account_reference: 'BINGWAONE',
         phone_number: '254722334455',
         amount: 8200.00,
         mpesa_receipt: 'LGR4820B34',

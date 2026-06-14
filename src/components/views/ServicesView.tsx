@@ -37,7 +37,7 @@ import {
 const COLORS = ['#00BFFF', '#0DB02B', '#FF4500', '#FF3B30', '#6B7280', '#D000F0', '#FFCC00'];
 
 export default function ServicesView() {
-  const [activeTab, setActiveTab] = useState<'bingwazone' | 'pesatrix'>('bingwazone');
+  const [activeTab, setActiveTab] = useState<'bingwaone' | 'pesatrix'>('bingwaone');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [data, setData] = useState<any>(null);
@@ -89,9 +89,9 @@ export default function ServicesView() {
     );
   }
 
-  const serviceData = activeTab === 'bingwazone' ? data?.bingwazone : data?.pesatrix;
-  const oppositeData = activeTab === 'bingwazone' ? data?.pesatrix : data?.bingwazone;
-  const serviceLabel = activeTab === 'bingwazone' ? 'BingwaZone' : 'Pesatrix';
+  const serviceData = activeTab === 'bingwaone' ? data?.bingwaone : data?.pesatrix;
+  const oppositeData = activeTab === 'bingwaone' ? data?.pesatrix : data?.bingwaone;
+  const serviceLabel = activeTab === 'bingwaone' ? 'BingwaOne' : 'Pesatrix';
 
   // Prepare chart data for Modules Inflow Share
   const moduleChartData = (serviceData?.modules || []).map((m: any) => ({
@@ -113,15 +113,15 @@ export default function ServicesView() {
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
         <div className="flex bg-background border border-border-main p-1 rounded-xl self-start shadow-sm">
           <button
-            onClick={() => setActiveTab('bingwazone')}
+            onClick={() => setActiveTab('bingwaone')}
             className={`text-xs px-4 py-2 rounded-lg font-bold flex items-center gap-2 transition-all cursor-pointer ${
-              activeTab === 'bingwazone'
+              activeTab === 'bingwaone'
                 ? 'bg-panel text-accent border border-border-main shadow-sm'
                 : 'text-muted-main hover:text-text-main'
             }`}
           >
             <Cpu size={14} />
-            <span>BingwaZone Portal</span>
+            <span>BingwaOne Portal</span>
           </button>
           <button
             onClick={() => setActiveTab('pesatrix')}
@@ -359,6 +359,107 @@ export default function ServicesView() {
           )}
         </div>
       </div>
+
+      {/* Detailed Modules and Types Cards for BingwaOne */}
+      {activeTab === 'bingwaone' && (
+        <div className="space-y-6">
+          {/* Modules Grid */}
+          <div className="space-y-3">
+            <div>
+              <h3 className="font-bold text-sm text-text-main">BingwaOne Modules Collection Breakdown</h3>
+              <p className="text-xs text-muted-main">Detailed revenue share and volumes per application module</p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {serviceData?.modules.map((m: any, idx: number) => {
+                const pct = serviceData.totalInflow > 0 ? (m.volume / serviceData.totalInflow) * 100 : 0;
+                const avg = m.count > 0 ? m.volume / m.count : 0;
+                return (
+                  <motion.div
+                    key={m.name}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: idx * 0.05 }}
+                    className="bg-panel border border-border-main hover:border-accent/35 rounded-2xl p-5 shadow-sm transition-all flex flex-col justify-between"
+                  >
+                    <div>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-bold text-xs text-text-main truncate">{getReadableLabel(m.name)}</span>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-accent/15 text-accent">
+                          {pct.toFixed(1)}%
+                        </span>
+                      </div>
+                      <p className="text-[9px] text-muted-main mt-0.5 uppercase tracking-wide">Module ID: {m.name}</p>
+                    </div>
+
+                    <div className="mt-4">
+                      <h4 className="text-lg font-extrabold text-text-main">{formatKES(m.volume)}</h4>
+                      <div className="flex justify-between items-center text-[10px] text-muted-main mt-1.5 border-t border-border-main/50 pt-1.5 font-mono">
+                        <span>{m.count} payments</span>
+                        <span>Avg: {formatKES(avg)}</span>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 w-full bg-background rounded-full h-1 overflow-hidden">
+                      <div 
+                        className="h-full rounded-full bg-accent" 
+                        style={{ width: `${pct}%`, backgroundColor: COLORS[idx % COLORS.length] }} 
+                      />
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Types Grid */}
+          <div className="space-y-3">
+            <div>
+              <h3 className="font-bold text-sm text-text-main">BingwaOne Payment Types Breakdown</h3>
+              <p className="text-xs text-muted-main">Detailed revenue share and volumes per payment method type</p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {serviceData?.types.map((t: any, idx: number) => {
+                const pct = serviceData.totalVolume > 0 ? (t.volume / serviceData.totalVolume) * 100 : 0;
+                const avg = t.count > 0 ? t.volume / t.count : 0;
+                return (
+                  <motion.div
+                    key={t.name}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: idx * 0.05 }}
+                    className="bg-panel border border-border-main hover:border-success-main/35 rounded-2xl p-5 shadow-sm transition-all flex flex-col justify-between"
+                  >
+                    <div>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-bold text-xs text-text-main truncate uppercase">{t.name}</span>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-success-main/15 text-success-main">
+                          {pct.toFixed(1)}%
+                        </span>
+                      </div>
+                      <p className="text-[9px] text-muted-main mt-0.5 uppercase tracking-wide">Type ID: {t.name}</p>
+                    </div>
+
+                    <div className="mt-4">
+                      <h4 className="text-lg font-extrabold text-text-main">{formatKES(t.volume)}</h4>
+                      <div className="flex justify-between items-center text-[10px] text-muted-main mt-1.5 border-t border-border-main/50 pt-1.5 font-mono">
+                        <span>{t.count} payments</span>
+                        <span>Avg: {formatKES(avg)}</span>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 w-full bg-background rounded-full h-1 overflow-hidden">
+                      <div 
+                        className="h-full rounded-full bg-success-main" 
+                        style={{ width: `${pct}%`, backgroundColor: COLORS[(idx + 2) % COLORS.length] }} 
+                      />
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Bottom section: Recent B2C Payout Logs */}
       <div className="bg-panel border border-border-main rounded-2xl p-5 md:p-6 shadow-sm">

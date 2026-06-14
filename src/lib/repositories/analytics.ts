@@ -56,8 +56,8 @@ export async function getAnalyticsData() {
   let revenueMonth = 0;
   let revenueYear = 0;
 
-  // Revenue by Day (last 7 days) & Cashflow by Day (including BingwaZone / Pesatrix)
-  const dailyDataMap: { [date: string]: { date: string; revenue: number; inflow: number; outflow: number; bingwazoneInflow: number; pesatrixInflow: number; bingwazoneOutflow: number; pesatrixOutflow: number } } = {};
+  // Revenue by Day (last 7 days) & Cashflow by Day (including BingwaOne / Pesatrix)
+  const dailyDataMap: { [date: string]: { date: string; revenue: number; inflow: number; outflow: number; bingwaoneInflow: number; pesatrixInflow: number; bingwaoneOutflow: number; pesatrixOutflow: number } } = {};
   
   // Initialize last 7 days
   for (let i = 6; i >= 0; i--) {
@@ -69,9 +69,9 @@ export async function getAnalyticsData() {
       revenue: 0, 
       inflow: 0, 
       outflow: 0,
-      bingwazoneInflow: 0,
+      bingwaoneInflow: 0,
       pesatrixInflow: 0,
-      bingwazoneOutflow: 0,
+      bingwaoneOutflow: 0,
       pesatrixOutflow: 0
     };
   }
@@ -117,15 +117,15 @@ export async function getAnalyticsData() {
       if (dailyDataMap[dateStr]) {
         dailyDataMap[dateStr].revenue += amount;
         dailyDataMap[dateStr].inflow += amount;
-        if (tx.source_system === 'bingwazone') {
-          dailyDataMap[dateStr].bingwazoneInflow += amount;
+        if (tx.source_system === 'bingwaone' || tx.source_system === 'bingwazone') {
+          dailyDataMap[dateStr].bingwaoneInflow += amount;
         } else if (tx.source_system === 'pesatrix') {
           dailyDataMap[dateStr].pesatrixInflow += amount;
         }
       }
 
       // Source distribution
-      const sourceName = tx.source_system === 'bingwazone' ? 'BingwaZone' : tx.source_system === 'pesatrix' ? 'Pesatrix' : getReadableLabel(tx.product_sources?.name || tx.source_system || 'Manual');
+      const sourceName = (tx.source_system === 'bingwaone' || tx.source_system === 'bingwazone') ? 'BingwaOne' : tx.source_system === 'pesatrix' ? 'Pesatrix' : getReadableLabel(tx.product_sources?.name || tx.source_system || 'Manual');
       sourceMap[sourceName] = (sourceMap[sourceName] || 0) + amount;
 
       // Module distribution
@@ -143,8 +143,8 @@ export async function getAnalyticsData() {
       // Group by daily outflow
       if (dailyDataMap[dateStr]) {
         dailyDataMap[dateStr].outflow += amount;
-        if (tx.source_system === 'bingwazone') {
-          dailyDataMap[dateStr].bingwazoneOutflow += amount;
+        if (tx.source_system === 'bingwaone' || tx.source_system === 'bingwazone') {
+          dailyDataMap[dateStr].bingwaoneOutflow += amount;
         } else if (tx.source_system === 'pesatrix') {
           dailyDataMap[dateStr].pesatrixOutflow += amount;
         }
@@ -164,11 +164,11 @@ export async function getAnalyticsData() {
     inflow: d.inflow,
     outflow: d.outflow,
     net: d.inflow - d.outflow,
-    bingwazoneVolume: d.bingwazoneInflow + d.bingwazoneOutflow,
+    bingwaoneVolume: d.bingwaoneInflow + d.bingwaoneOutflow,
     pesatrixVolume: d.pesatrixInflow + d.pesatrixOutflow,
-    bingwazoneInflow: d.bingwazoneInflow,
+    bingwaoneInflow: d.bingwaoneInflow,
     pesatrixInflow: d.pesatrixInflow,
-    bingwazoneOutflow: d.bingwazoneOutflow,
+    bingwaoneOutflow: d.bingwaoneOutflow,
     pesatrixOutflow: d.pesatrixOutflow
   }));
 

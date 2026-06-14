@@ -2,6 +2,7 @@
 export function getReadableLabel(value: string | null | undefined): string {
   if (!value) return '';
   const mapping: Record<string, string> = {
+    'bingwaone': 'BingwaOne',
     'bingwazone': 'BingwaZone',
     'pesatrix': 'Pesatrix',
     'unknown': 'Unknown',

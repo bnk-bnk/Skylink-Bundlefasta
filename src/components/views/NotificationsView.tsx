@@ -134,7 +134,7 @@ export default function NotificationsView() {
             className="bg-background border border-border-main rounded-lg px-2.5 py-1.5 text-xs text-text-main focus:outline-none font-semibold cursor-pointer"
           >
             <option value="">All Sources</option>
-            <option value="bingwazone">BingwaZone</option>
+            <option value="bingwaone">BingwaOne</option>
             <option value="pesatrix">Pesatrix</option>
             <option value="manual">Manual</option>
           </select>

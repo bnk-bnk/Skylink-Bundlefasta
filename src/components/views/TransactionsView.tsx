@@ -272,7 +272,7 @@ export default function TransactionsView() {
               className="text-xs py-2 px-3 border border-border-main rounded-lg bg-background text-text-main focus:outline-none font-semibold cursor-pointer"
             >
               <option value="">All Sources</option>
-              <option value="bingwazone">BingwaZone</option>
+              <option value="bingwaone">BingwaOne</option>
               <option value="pesatrix">Pesatrix</option>
               <option value="manual">Manual</option>
               <option value="unknown">Unknown</option>
@@ -636,7 +636,7 @@ export default function TransactionsView() {
                       {/* Source */}
                       <td className="py-3 px-4">
                         <span className={`inline-flex items-center text-[9px] font-semibold px-2 py-0.5 rounded-full ${
-                          tx.source_system === 'bingwazone'
+                          tx.source_system === 'bingwaone'
                             ? 'text-accent bg-accent/10 border border-accent/20'
                             : tx.source_system === 'pesatrix'
                               ? 'text-success-main bg-success-main/10 border border-success-main/20'

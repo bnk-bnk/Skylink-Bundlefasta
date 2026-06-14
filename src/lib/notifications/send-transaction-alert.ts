@@ -15,6 +15,7 @@ interface AlertParams {
   phone_number?: string | null;
   mpesa_receipt?: string | null;
   module?: string | null;
+  isTest?: boolean;
 }
 
 /**
@@ -123,18 +124,22 @@ export async function triggerNotificationFlow(params: AlertParams) {
     }
 
     // 2. Compute deduplication key
-    const deduplicationKey = `transaction:${params.transaction_id}:${params.direction.toLowerCase()}-alert:${channel}`;
+    const deduplicationKey = params.isTest
+      ? `transaction:${params.transaction_id}:${params.direction.toLowerCase()}-alert:${channel}:test:${Date.now()}`
+      : `transaction:${params.transaction_id}:${params.direction.toLowerCase()}-alert:${channel}`;
 
     // 3. Check if notification has already been processed (Idempotency)
-    const { data: existingDelivery } = await adminSupabase
-      .from('notification_deliveries')
-      .select('id, status')
-      .eq('deduplication_key', deduplicationKey)
-      .maybeSingle();
+    if (!params.isTest) {
+      const { data: existingDelivery } = await adminSupabase
+        .from('notification_deliveries')
+        .select('id, status')
+        .eq('deduplication_key', deduplicationKey)
+        .maybeSingle();
 
-    if (existingDelivery) {
-      console.log(`[Notification Alert] Delivery already exists (Status: ${existingDelivery.status}). Skipping.`);
-      return;
+      if (existingDelivery) {
+        console.log(`[Notification Alert] Delivery already exists (Status: ${existingDelivery.status}). Skipping.`);
+        return;
+      }
     }
 
     // 4. Build message
@@ -191,7 +196,7 @@ export async function triggerNotificationFlow(params: AlertParams) {
     } else {
       const apiUrl = process.env.EVOLUTION_API_URL || '';
       const apiKey = process.env.EVOLUTION_API_KEY || '';
-      const instance = process.env.EVOLUTION_INSTANCE || 'bingwazone';
+      const instance = process.env.EVOLUTION_INSTANCE || 'bingwaone';
 
       if (!apiUrl || !apiKey) {
         errorMessage = 'EVOLUTION_API_URL or EVOLUTION_API_KEY environment variable is missing';

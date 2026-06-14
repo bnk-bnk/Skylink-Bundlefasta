@@ -5,7 +5,7 @@ import { logSystemAudit } from '../repositories/audit';
 import { triggerNotificationFlow } from '../notifications/send-transaction-alert';
 
 export interface WebhookReconciliationParams {
-  source_system: 'bingwazone' | 'pesatrix';
+  source_system: 'bingwaone' | 'bingwazone' | 'pesatrix';
   event_key: string;
   event_type: string;
   schema_version: number | null;
@@ -45,7 +45,7 @@ export interface IngestionResult {
 }
 
 /**
- * Service to process incoming webhooks from BingwaZone/Pesatrix,
+ * Service to process incoming webhooks from BingwaOne/Pesatrix,
  * reconcile them with Safaricom transactions, and dispatch alerts.
  */
 export async function reconcileWebhookTransaction(

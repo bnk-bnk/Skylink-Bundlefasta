@@ -885,7 +885,7 @@ export async function sendTestNotificationAction() {
 
     const testTx = tx || {
       id: '00000000-0000-0000-0000-000000000000',
-      source_system: 'bingwazone',
+      source_system: 'bingwaone',
       direction: 'IN',
       transaction_type: 'STK',
       amount: 100,
@@ -900,14 +900,15 @@ export async function sendTestNotificationAction() {
     // Trigger the flow
     await triggerNotificationFlow({
       transaction_id: testTx.id,
-      source_system: testTx.source_system || 'manual',
+      source_system: testTx.source_system === 'bingwazone' ? 'bingwaone' : (testTx.source_system || 'manual'),
       direction: testTx.direction || 'IN',
       transaction_type: testTx.transaction_type || 'STK',
       amount: Number(testTx.amount),
       account_reference: testTx.account_reference || 'Test alert reference',
       phone_number: testTx.phone_number || '254712345678',
       mpesa_receipt: testTx.mpesa_receipt || 'TESTING123',
-      module: testTx.module || 'test'
+      module: testTx.module || 'test',
+      isTest: true
     });
 
     await logAudit('TEST_NOTIFICATION_SENT', { userId: user.id });
@@ -927,7 +928,7 @@ export async function getServicesStatsAction() {
     const { data: txs, error } = await supabase
       .from('transactions')
       .select('*')
-      .in('source_system', ['bingwazone', 'pesatrix'])
+      .in('source_system', ['bingwaone', 'bingwazone', 'pesatrix'])
       .eq('status', 'SUCCESS')
       .order('created_at', { ascending: false });
 
@@ -940,7 +941,12 @@ export async function getServicesStatsAction() {
     const todayMs = todayStart.getTime();
 
     const getStatsForService = (serviceName: string) => {
-      const serviceTxs = txList.filter((t: any) => t.source_system === serviceName);
+      const serviceTxs = txList.filter((t: any) => {
+        if (serviceName === 'bingwaone') {
+          return t.source_system === 'bingwaone' || t.source_system === 'bingwazone';
+        }
+        return t.source_system === serviceName;
+      });
       
       const totalInflow = serviceTxs
         .filter((t: any) => t.direction === 'IN')
@@ -1011,7 +1017,7 @@ export async function getServicesStatsAction() {
 
     return {
       success: true,
-      bingwazone: getStatsForService('bingwazone'),
+      bingwaone: getStatsForService('bingwaone'),
       pesatrix: getStatsForService('pesatrix')
     };
 

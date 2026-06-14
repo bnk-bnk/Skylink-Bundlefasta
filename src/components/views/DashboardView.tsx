@@ -145,9 +145,9 @@ export default function DashboardView() {
       color: 'text-warning-main bg-warning-main/10',
     },
     {
-      title: 'BingwaZone Today',
-      value: `In: ${formatKES(stats?.bingwazoneInToday || 0)}`,
-      desc: `Out: ${formatKES(stats?.bingwazoneOutToday || 0)}`,
+      title: 'BingwaOne Today',
+      value: `In: ${formatKES(stats?.bingwaoneInToday || 0)}`,
+      desc: `Out: ${formatKES(stats?.bingwaoneOutToday || 0)}`,
       icon: Cpu,
       color: 'text-accent bg-accent/10',
     },
@@ -208,7 +208,7 @@ export default function DashboardView() {
         <div className="bg-panel border border-border-main rounded-xl p-5 shadow-sm flex flex-col">
           <div className="mb-4">
             <h3 className="font-bold text-sm">Service Revenue Inflow Trend</h3>
-            <p className="text-xs text-muted-main">Daily inflows comparison (BingwaZone vs Pesatrix) over last 7 days</p>
+            <p className="text-xs text-muted-main">Daily inflows comparison (BingwaOne vs Pesatrix) over last 7 days</p>
           </div>
           <div className="h-64 w-full text-xs">
             <ResponsiveContainer width="100%" height="100%">
@@ -231,7 +231,7 @@ export default function DashboardView() {
                   formatter={(value) => [formatKES(value as number), '']}
                 />
                 <Legend />
-                <Area type="monotone" dataKey="bingwazoneInflow" stroke="#00BFFF" strokeWidth={2} fillOpacity={1} fill="url(#colorBz)" name="BingwaZone In" />
+                <Area type="monotone" dataKey="bingwaoneInflow" stroke="#00BFFF" strokeWidth={2} fillOpacity={1} fill="url(#colorBz)" name="BingwaOne In" />
                 <Area type="monotone" dataKey="pesatrixInflow" stroke="#0DB02B" strokeWidth={2} fillOpacity={1} fill="url(#colorPt)" name="Pesatrix In" />
               </AreaChart>
             </ResponsiveContainer>
@@ -255,7 +255,7 @@ export default function DashboardView() {
                   formatter={(value) => [formatKES(value as number), '']}
                 />
                 <Legend />
-                <Bar dataKey="bingwazoneVolume" fill="#00BFFF" radius={[4, 4, 0, 0]} name="BingwaZone" />
+                <Bar dataKey="bingwaoneVolume" fill="#00BFFF" radius={[4, 4, 0, 0]} name="BingwaOne" />
                 <Bar dataKey="pesatrixVolume" fill="#0DB02B" radius={[4, 4, 0, 0]} name="Pesatrix" />
               </BarChart>
             </ResponsiveContainer>

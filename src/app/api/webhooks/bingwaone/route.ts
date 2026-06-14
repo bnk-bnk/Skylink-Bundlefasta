@@ -6,12 +6,12 @@ import { logSystemAudit } from '@/lib/repositories/audit';
 
 export async function POST(req: Request) {
   try {
-    const signature = req.headers.get('X-BingwaZone-Signature');
-    const eventHeader = req.headers.get('X-BingwaZone-Event');
+    const signature = req.headers.get('X-BingwaOne-Signature') || req.headers.get('X-BingwaZone-Signature');
+    const eventHeader = req.headers.get('X-BingwaOne-Event') || req.headers.get('X-BingwaZone-Event');
 
     if (!signature || !eventHeader) {
       await logSystemAudit('WEBHOOK_SIGNATURE_REJECTED', {
-        source_system: 'bingwazone',
+        source_system: 'bingwaone',
         reason: 'Missing signature or event header'
       });
       return new NextResponse('Missing required headers', { status: 401 });
@@ -19,11 +19,11 @@ export async function POST(req: Request) {
 
     // Read raw body exactly once for timing safe verification
     const rawBody = await req.text();
-    const secret = process.env.BINGWAZONE_WEBHOOK_SECRET;
+    const secret = process.env.BINGWAONE_WEBHOOK_SECRET || process.env.BINGWAZONE_WEBHOOK_SECRET;
 
-    if (!verifyWebhookHmac(rawBody, signature, secret, 'bingwazone')) {
+    if (!verifyWebhookHmac(rawBody, signature, secret, 'bingwaone')) {
       await logSystemAudit('WEBHOOK_SIGNATURE_REJECTED', {
-        source_system: 'bingwazone',
+        source_system: 'bingwaone',
         reason: 'HMAC signature verification failed'
       });
       return new NextResponse('Invalid signature', { status: 401 });
@@ -42,7 +42,7 @@ export async function POST(req: Request) {
     const eventType = payload.event;
     const sourceSystem = payload.source_system;
 
-    if (sourceSystem !== 'bingwazone') {
+    if (sourceSystem !== 'bingwaone' && sourceSystem !== 'bingwazone') {
       return new NextResponse('Invalid source_system', { status: 400 });
     }
 
@@ -50,7 +50,7 @@ export async function POST(req: Request) {
     // Header format: payment:<uuid>:completed OR wallet-withdrawal:<uuid>:completed
     const eventParts = eventHeader.split(':');
     if (eventParts.length !== 3) {
-      return new NextResponse('Invalid X-BingwaZone-Event header format', { status: 400 });
+      return new NextResponse('Invalid event header format', { status: 400 });
     }
 
     const [headerCategory, headerId, headerAction] = eventParts;
@@ -94,7 +94,7 @@ export async function POST(req: Request) {
       const receipt = payment.receipt ? String(payment.receipt).trim().toUpperCase() : null;
 
       const result = await reconcileWebhookTransaction({
-        source_system: 'bingwazone',
+        source_system: 'bingwaone',
         event_key: eventHeader,
         event_type: eventType,
         schema_version: schemaVersion || null,
@@ -156,7 +156,7 @@ export async function POST(req: Request) {
       const receipt = withdrawal.provider_reference || withdrawal.transaction_id || null;
 
       const result = await reconcileWebhookTransaction({
-        source_system: 'bingwazone',
+        source_system: 'bingwaone',
         event_key: eventHeader,
         event_type: eventType,
         schema_version: schemaVersion || null,
@@ -197,7 +197,7 @@ export async function POST(req: Request) {
     return new NextResponse('Unsupported event type', { status: 400 });
 
   } catch (err: any) {
-    console.error('[BingwaZone Webhook Route Error]:', err);
+    console.error('[BingwaOne Webhook Route Error]:', err);
     return new NextResponse('Internal Server Error', { status: 500 });
   }
 }

@@ -18,8 +18,16 @@ export async function sendEvolutionWhatsApp(
   const baseUrl = config.apiUrl.replace(/\/+$/, '');
   const url = `${baseUrl}/message/sendText/${config.instance}`;
 
+  // Normalize phone number for WhatsApp (Kenyan format support: e.g. 0727921038 -> 254727921038)
+  let normalizedPhone = phone.replace(/\D/g, '');
+  if (normalizedPhone.startsWith('0')) {
+    normalizedPhone = '254' + normalizedPhone.slice(1);
+  } else if (!normalizedPhone.startsWith('254') && normalizedPhone.length === 9) {
+    normalizedPhone = '254' + normalizedPhone;
+  }
+
   const payload = {
-    number: phone,
+    number: normalizedPhone,
     text: message,
     delay: 1000,
     linkPreview: false

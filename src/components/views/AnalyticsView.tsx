@@ -215,7 +215,7 @@ export default function AnalyticsView() {
         withdrawalRatio: ptActRev > 0 ? (ptWdVol / ptActRev) * 100 : 0
       });
 
-      const sourcesList = ['bingwazone', 'pesatrix', 'manual', 'unknown'];
+      const sourcesList = ['bingwaone', 'pesatrix', 'manual', 'unknown'];
       const sourcesData: Record<string, any> = {};
       sourcesList.forEach(src => {
         const curSrc = curMetrics.financialList.filter((t: any) => t.source_system === src);
@@ -340,7 +340,7 @@ export default function AnalyticsView() {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
           {[
-            { label: 'All Services', val: selectedSource, set: (v: string) => { setSelectedSource(v); setSelectedModule(''); }, opts: ['bingwazone', 'pesatrix', 'manual', 'unknown'] },
+            { label: 'All Services', val: selectedSource, set: (v: string) => { setSelectedSource(v); setSelectedModule(''); }, opts: ['bingwaone', 'pesatrix', 'manual', 'unknown'] },
             { label: 'All Modules', val: selectedModule, set: setSelectedModule, opts: availableModules },
             { label: 'All Flow Directions', val: selectedDirection, set: setSelectedDirection, opts: ['IN', 'OUT'] },
             { label: 'All Tx Types', val: selectedType, set: setSelectedType, opts: ['C2B', 'STK', 'B2C', 'REVERSAL', 'activation', 'withdrawal'] },

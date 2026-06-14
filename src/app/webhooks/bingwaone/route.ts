@@ -12,8 +12,8 @@ export async function POST(req: Request) {
   const receivedAt = new Date().toISOString();
   
   // 1. Read headers and validate
-  const signatureHeader = req.headers.get('X-BingwaZone-Signature');
-  const eventHeader = req.headers.get('X-BingwaZone-Event');
+  const signatureHeader = req.headers.get('X-BingwaOne-Signature') || req.headers.get('X-BingwaZone-Signature');
+  const eventHeader = req.headers.get('X-BingwaOne-Event') || req.headers.get('X-BingwaZone-Event');
 
   if (!signatureHeader || !eventHeader) {
     return NextResponse.json(
@@ -50,9 +50,9 @@ export async function POST(req: Request) {
   }
 
   // 3. Verify signature using timingSafeEqual
-  const secret = process.env.BINGWAZONE_WEBHOOK_SECRET;
+  const secret = process.env.BINGWAONE_WEBHOOK_SECRET || process.env.BINGWAZONE_WEBHOOK_SECRET;
   if (!secret) {
-    console.error('[BingwaOne Webhook] BINGWAZONE_WEBHOOK_SECRET is not configured');
+    console.error('[BingwaOne Webhook] BINGWAONE_WEBHOOK_SECRET is not configured');
     return NextResponse.json(
       { success: false, error: 'Internal Server Error' },
       { status: 500 }
@@ -147,7 +147,7 @@ export async function POST(req: Request) {
 
       if (insertErr) throw insertErr;
 
-      await logSystemAudit('BINGWAZONE_WEBHOOK_PROCESSED', {
+      await logSystemAudit('BINGWAONE_WEBHOOK_PROCESSED', {
         event_key: eventHeader,
         is_test: true
       });
@@ -179,7 +179,7 @@ export async function POST(req: Request) {
   const eventParts = eventHeader.split(':');
   if (eventParts.length !== 3) {
     return NextResponse.json(
-      { success: false, error: 'Invalid X-BingwaZone-Event header format' },
+      { success: false, error: 'Invalid event header format' },
       { status: 400 }
     );
   }
@@ -241,7 +241,7 @@ export async function POST(req: Request) {
   let dbEvent: any = null;
   try {
     // Audit receipt
-    await logSystemAudit('BINGWAZONE_WEBHOOK_RECEIVED', {
+    await logSystemAudit('BINGWAONE_WEBHOOK_RECEIVED', {
       event_key: eventHeader,
       event_type: eventType
     });
@@ -269,7 +269,7 @@ export async function POST(req: Request) {
       }
 
       if (existingEvent.processing_status === 'processed') {
-        await logSystemAudit('BINGWAZONE_WEBHOOK_DUPLICATE', {
+        await logSystemAudit('BINGWAONE_WEBHOOK_DUPLICATE', {
           event_key: eventHeader,
           transaction_id: existingEvent.transaction_id
         });
@@ -611,7 +611,7 @@ export async function POST(req: Request) {
     }
 
     // 10. Write Audit log
-    await logSystemAudit('BINGWAZONE_WEBHOOK_PROCESSED', {
+    await logSystemAudit('BINGWAONE_WEBHOOK_PROCESSED', {
       event_key: eventHeader,
       transaction_id: txId,
       was_reconciled: isReconciled,
@@ -649,7 +649,7 @@ export async function POST(req: Request) {
 
       triggerNotificationFlow({
         transaction_id: txId,
-        source_system: 'bingwazone', // Maintain unified SMS template compatibility
+        source_system: 'bingwaone', // Maintain unified SMS template compatibility
         direction: eventType === 'payment.completed' ? 'IN' : 'OUT',
         transaction_type: eventType === 'payment.completed' ? (paymentObj.type || 'subscription') : 'wallet_withdrawal',
         amount: Number(paymentObj.amount),

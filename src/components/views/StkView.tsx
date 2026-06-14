@@ -151,7 +151,7 @@ export default function StkView() {
               value={reference}
               onChange={(e) => setReference(e.target.value.toUpperCase().trim())}
               className="w-full text-xs py-2 px-3 border border-border-main rounded-lg bg-background font-mono font-bold"
-              placeholder="e.g. PESATRIX, BINGWAZONE, CUSTOM"
+              placeholder="e.g. PESATRIX, BINGWAONE, CUSTOM"
             />
           </div>
 

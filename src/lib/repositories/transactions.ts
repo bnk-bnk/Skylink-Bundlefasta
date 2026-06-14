@@ -296,12 +296,12 @@ export async function getDashboardStats() {
     .filter((tx: any) => tx.source_system === 'pesatrix' && tx.direction === 'OUT' && tx.status === 'SUCCESS')
     .reduce((sum: number, tx: any) => sum + Number(tx.amount), 0);
 
-  const bingwazoneInToday = txList
-    .filter((tx: any) => tx.source_system === 'bingwazone' && tx.direction === 'IN' && tx.status === 'SUCCESS')
+  const bingwaoneInToday = txList
+    .filter((tx: any) => (tx.source_system === 'bingwaone' || tx.source_system === 'bingwazone') && tx.direction === 'IN' && tx.status === 'SUCCESS')
     .reduce((sum: number, tx: any) => sum + Number(tx.amount), 0);
 
-  const bingwazoneOutToday = txList
-    .filter((tx: any) => tx.source_system === 'bingwazone' && tx.direction === 'OUT' && tx.status === 'SUCCESS')
+  const bingwaoneOutToday = txList
+    .filter((tx: any) => (tx.source_system === 'bingwaone' || tx.source_system === 'bingwazone') && tx.direction === 'OUT' && tx.status === 'SUCCESS')
     .reduce((sum: number, tx: any) => sum + Number(tx.amount), 0);
 
   return {
@@ -314,8 +314,8 @@ export async function getDashboardStats() {
     reversalsToday,
     pesatrixInToday,
     pesatrixOutToday,
-    bingwazoneInToday,
-    bingwazoneOutToday
+    bingwaoneInToday,
+    bingwaoneOutToday
   };
 }
 

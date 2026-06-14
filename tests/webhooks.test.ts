@@ -7,7 +7,7 @@ import { verifyWebhookHmac } from '../src/lib/webhooks/verify-hmac';
 import { normalizeKenyanPhone } from '../src/lib/utils/phone';
 import { buildAlertMessage } from '../src/lib/notifications/send-transaction-alert';
 import { getReadableLabel } from '../src/lib/utils/labels';
-import { POST } from '../src/app/webhooks/bingwazone/route';
+import { POST } from '../src/app/webhooks/bingwaone/route';
 
 // Programmatically load .env for DB integration tests
 try {
@@ -31,24 +31,24 @@ try {
   console.warn('Failed to load .env file programmatically', e);
 }
 
-// Make sure BINGWAZONE_WEBHOOK_SECRET is set to secret123 for signature tests
-process.env.BINGWAZONE_WEBHOOK_SECRET = 'secret123';
+// Make sure BINGWAONE_WEBHOOK_SECRET is set to secret123 for signature tests
+process.env.BINGWAONE_WEBHOOK_SECRET = 'secret123';
 
 const BZ_SECRET = 'test_bz_secret_value_123';
 const PT_SECRET = 'test_pt_secret_value_456';
 
-test('HMAC Signature Verification - BingwaZone Format', () => {
+test('HMAC Signature Verification - BingwaOne Format', () => {
   const body = JSON.stringify({ event: 'payment.completed', amount: 500 });
   const signature = 'sha256=' + crypto.createHmac('sha256', BZ_SECRET).update(body).digest('hex');
 
   // Assert successful verification
-  assert.strictEqual(verifyWebhookHmac(body, signature, BZ_SECRET, 'bingwazone'), true);
+  assert.strictEqual(verifyWebhookHmac(body, signature, BZ_SECRET, 'bingwaone'), true);
 
   // Assert failed verification on wrong secret
-  assert.strictEqual(verifyWebhookHmac(body, signature, 'wrong_secret', 'bingwazone'), false);
+  assert.strictEqual(verifyWebhookHmac(body, signature, 'wrong_secret', 'bingwaone'), false);
 
   // Assert failed verification on malformed header
-  assert.strictEqual(verifyWebhookHmac(body, signature.replace('sha256=', ''), BZ_SECRET, 'bingwazone'), false);
+  assert.strictEqual(verifyWebhookHmac(body, signature.replace('sha256=', ''), BZ_SECRET, 'bingwaone'), false);
 });
 
 test('HMAC Signature Verification - Pesatrix Format', () => {
@@ -95,7 +95,7 @@ test('Readable Labels Mappings', () => {
 test('Unified Message Templates Generation', () => {
   const incomingParams = {
     transaction_id: 'tx_uuid_123',
-    source_system: 'bingwazone',
+    source_system: 'bingwaone',
     direction: 'IN' as const,
     transaction_type: 'payment.completed',
     amount: 1250,
@@ -107,7 +107,7 @@ test('Unified Message Templates Generation', () => {
   const smsIncoming = buildAlertMessage(incomingParams, 'sms');
   assert.match(smsIncoming, /SKYLINK PAYBILL/);
   assert.match(smsIncoming, /Received KES 1,250\.00/);
-  assert.match(smsIncoming, /Source: BingwaZone/);
+  assert.match(smsIncoming, /Source: BingwaOne/);
   assert.match(smsIncoming, /Module: Mini Sites/);
   assert.match(smsIncoming, /Phone: 254712345678/);
   assert.match(smsIncoming, /Receipt: TFA8765432/);
@@ -122,7 +122,7 @@ test('Unified Message Templates Generation', () => {
 // ==========================================
 
 test('Route Handler - Reject Missing Headers', async () => {
-  const req = new Request('http://localhost/webhooks/bingwazone', {
+  const req = new Request('http://localhost/webhooks/bingwaone', {
     method: 'POST',
     body: '{"test":true}'
   });
@@ -135,11 +135,11 @@ test('Route Handler - Reject Missing Headers', async () => {
 });
 
 test('Route Handler - Reject Invalid Signature Format', async () => {
-  const req = new Request('http://localhost/webhooks/bingwazone', {
+  const req = new Request('http://localhost/webhooks/bingwaone', {
     method: 'POST',
     headers: {
-      'X-BingwaZone-Event': 'payment:test-event-123:completed',
-      'X-BingwaZone-Signature': 'invalid_format_without_sha256_prefix'
+      'X-BingwaOne-Event': 'payment:test-event-123:completed',
+      'X-BingwaOne-Signature': 'invalid_format_without_sha256_prefix'
     },
     body: '{"test":true}'
   });
@@ -152,11 +152,11 @@ test('Route Handler - Reject Invalid Signature Format', async () => {
 });
 
 test('Route Handler - Reject Invalid Signature', async () => {
-  const req = new Request('http://localhost/webhooks/bingwazone', {
+  const req = new Request('http://localhost/webhooks/bingwaone', {
     method: 'POST',
     headers: {
-      'X-BingwaZone-Event': 'payment:test-event-123:completed',
-      'X-BingwaZone-Signature': 'sha256=5bb8d15d65f577cf4147f2618059ff94eb2245b79646b95bcf078328eb92040d' // changed last char
+      'X-BingwaOne-Event': 'payment:test-event-123:completed',
+      'X-BingwaOne-Signature': 'sha256=5bb8d15d65f577cf4147f2618059ff94eb2245b79646b95bcf078328eb92040d' // changed last char
     },
     body: '{"test":true}'
   });
@@ -172,11 +172,11 @@ test('Route Handler - Reject Malformed JSON', async () => {
   const body = '{"test":true, malformed';
   const signature = 'sha256=' + crypto.createHmac('sha256', 'secret123').update(body).digest('hex');
 
-  const req = new Request('http://localhost/webhooks/bingwazone', {
+  const req = new Request('http://localhost/webhooks/bingwaone', {
     method: 'POST',
     headers: {
-      'X-BingwaZone-Event': 'payment:test-event-123:completed',
-      'X-BingwaZone-Signature': signature
+      'X-BingwaOne-Event': 'payment:test-event-123:completed',
+      'X-BingwaOne-Signature': signature
     },
     body: body
   });
@@ -193,11 +193,11 @@ test('Route Handler - Accept and Process Test Webhook', async () => {
   const body = JSON.stringify({ test: true });
   const signature = 'sha256=' + crypto.createHmac('sha256', 'secret123').update(body).digest('hex');
 
-  const req = new Request('http://localhost/webhooks/bingwazone', {
+  const req = new Request('http://localhost/webhooks/bingwaone', {
     method: 'POST',
     headers: {
-      'X-BingwaZone-Event': uniqueEventKey,
-      'X-BingwaZone-Signature': signature
+      'X-BingwaOne-Event': uniqueEventKey,
+      'X-BingwaOne-Signature': signature
     },
     body: body
   });
@@ -210,11 +210,11 @@ test('Route Handler - Accept and Process Test Webhook', async () => {
   assert.strictEqual(data.event_key, uniqueEventKey);
 
   // Send the same test webhook again to test duplicate response
-  const reqDuplicate = new Request('http://localhost/webhooks/bingwazone', {
+  const reqDuplicate = new Request('http://localhost/webhooks/bingwaone', {
     method: 'POST',
     headers: {
-      'X-BingwaZone-Event': uniqueEventKey,
-      'X-BingwaZone-Signature': signature
+      'X-BingwaOne-Event': uniqueEventKey,
+      'X-BingwaOne-Signature': signature
     },
     body: body
   });
@@ -230,11 +230,11 @@ test('Route Handler - Accept and Process Test Webhook', async () => {
   const changedBody = JSON.stringify({ test: true, extra: 1 });
   const changedSignature = 'sha256=' + crypto.createHmac('sha256', 'secret123').update(changedBody).digest('hex');
 
-  const reqConflict = new Request('http://localhost/webhooks/bingwazone', {
+  const reqConflict = new Request('http://localhost/webhooks/bingwaone', {
     method: 'POST',
     headers: {
-      'X-BingwaZone-Event': uniqueEventKey,
-      'X-BingwaZone-Signature': changedSignature
+      'X-BingwaOne-Event': uniqueEventKey,
+      'X-BingwaOne-Signature': changedSignature
     },
     body: changedBody
   });
@@ -254,7 +254,7 @@ test('Route Handler - Accept and Process Real Payment Webhook', async () => {
   const body = JSON.stringify({
     schema_version: 1,
     event: 'payment.completed',
-    source_system: 'bingwazone',
+    source_system: 'bingwaone',
     occurred_at: new Date().toISOString(),
     payment: {
       id: uniquePaymentId,
@@ -283,11 +283,11 @@ test('Route Handler - Accept and Process Real Payment Webhook', async () => {
 
   const signature = 'sha256=' + crypto.createHmac('sha256', 'secret123').update(body).digest('hex');
 
-  const req = new Request('http://localhost/webhooks/bingwazone', {
+  const req = new Request('http://localhost/webhooks/bingwaone', {
     method: 'POST',
     headers: {
-      'X-BingwaZone-Event': uniqueEventKey,
-      'X-BingwaZone-Signature': signature
+      'X-BingwaOne-Event': uniqueEventKey,
+      'X-BingwaOne-Signature': signature
     },
     body: body
   });
@@ -300,11 +300,11 @@ test('Route Handler - Accept and Process Real Payment Webhook', async () => {
   assert.strictEqual(data.event_key, uniqueEventKey);
 
   // Sending again should be duplicate
-  const reqDuplicate = new Request('http://localhost/webhooks/bingwazone', {
+  const reqDuplicate = new Request('http://localhost/webhooks/bingwaone', {
     method: 'POST',
     headers: {
-      'X-BingwaZone-Event': uniqueEventKey,
-      'X-BingwaZone-Signature': signature
+      'X-BingwaOne-Event': uniqueEventKey,
+      'X-BingwaOne-Signature': signature
     },
     body: body
   });
@@ -324,7 +324,7 @@ test('Route Handler - Accept and Process Wallet Withdrawal Webhook', async () =>
   const body = JSON.stringify({
     schema_version: 1,
     event: 'wallet.withdrawal.completed',
-    source_system: 'bingwazone',
+    source_system: 'bingwaone',
     occurred_at: new Date().toISOString(),
     withdrawal: {
       id: uniqueWithdrawalId,
@@ -347,11 +347,11 @@ test('Route Handler - Accept and Process Wallet Withdrawal Webhook', async () =>
 
   const signature = 'sha256=' + crypto.createHmac('sha256', 'secret123').update(body).digest('hex');
 
-  const req = new Request('http://localhost/webhooks/bingwazone', {
+  const req = new Request('http://localhost/webhooks/bingwaone', {
     method: 'POST',
     headers: {
-      'X-BingwaZone-Event': uniqueEventKey,
-      'X-BingwaZone-Signature': signature
+      'X-BingwaOne-Event': uniqueEventKey,
+      'X-BingwaOne-Signature': signature
     },
     body: body
   });
@@ -364,11 +364,11 @@ test('Route Handler - Accept and Process Wallet Withdrawal Webhook', async () =>
   assert.strictEqual(data.event_key, uniqueEventKey);
 
   // Sending again should be duplicate
-  const reqDuplicate = new Request('http://localhost/webhooks/bingwazone', {
+  const reqDuplicate = new Request('http://localhost/webhooks/bingwaone', {
     method: 'POST',
     headers: {
-      'X-BingwaZone-Event': uniqueEventKey,
-      'X-BingwaZone-Signature': signature
+      'X-BingwaOne-Event': uniqueEventKey,
+      'X-BingwaOne-Signature': signature
     },
     body: body
   });
@@ -379,5 +379,3 @@ test('Route Handler - Accept and Process Wallet Withdrawal Webhook', async () =>
   assert.strictEqual(dataDuplicate.success, true);
   assert.strictEqual(dataDuplicate.status, 'duplicate');
 });
-
-
