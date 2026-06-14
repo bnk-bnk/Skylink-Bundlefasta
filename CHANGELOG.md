@@ -5,6 +5,20 @@ All notable changes to the Skylink Bundlefasta Dashboard project will be documen
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to Semantic Versioning.
 
+## [1.8.0] - 2026-06-14
+
+### Added
+- Created a backend repository module `src/lib/repositories/services-analytics.ts` containing functions for Nairobi timezone period bounds (`getPeriodBounds`), percentage change calculations, service parent summaries, dynamic BingwaOne module summaries/details, and Pesatrix activation/withdrawal ledger tracking.
+- Added corresponding Server Actions in `src/app/actions.ts` for fetching services overview, BingwaOne modules list, module specific analytics, Pesatrix overview, and Pesatrix activations/withdrawals detail logs.
+- Created reusable `TransactionDetailDrawer.tsx` inside `src/components/shared` to centralize the presentation of transaction details and asynchronous linked webhooks evidence retrieval.
+- Applied three composite indexes on the `transactions` table (`source_system` + `occurred_at` DESC) to optimize analytics queries via Supabase database migration.
+- Added comprehensive unit and integration test suite `tests/services.test.ts` validating period calculation bounds, percentage trends, identifier formatting, and module discovery logic.
+
+### Changed
+- Overhauled `ServicesView.tsx` to display dual service parent cards (BingwaOne and Pesatrix), global period selector with custom range support, dynamically generated module cards, and standalone activations/withdrawals cards for Pesatrix.
+- Refactored `TransactionsView.tsx` to use the shared `TransactionDetailDrawer` component, reducing code duplication.
+- Updated `src/lib/utils/labels.ts` to export a dynamic, reusable `humanizeIdentifier` utility function for module and transaction payment types.
+
 ## [1.7.0] - 2026-06-14
 
 ### Added

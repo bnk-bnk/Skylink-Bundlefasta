@@ -58,3 +58,9 @@ body {
   transition: background-color 0.2s ease, color 0.2s ease;
   min-height: 100vh;
 }
+
+/* Fix option visibility in dropdowns */
+select option {
+  background-color: var(--panel);
+  color: var(--text-main);
+}

@@ -1,0 +1,5 @@
+[main 54c4e0a] feat: WhatsApp normalization, settings test bypass, transactions metadata schema, and bingwazone - rename
+ 22 files changed, 1996 insertions(+), 128 deletions(-)
+ create mode 100644 Webhook Receiver.md
+ rename src/app/api/webhooks/{bingwazone => bingwaone}/route.ts (90%)
+ rename src/app/webhooks/{bingwazone => bingwaone}/route.ts (97%)

@@ -3,6 +3,13 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { getDashboardStats, getTransactions, createTransaction, TransactionFilters } from '@/lib/repositories/transactions';
 import { getAnalyticsData } from '@/lib/repositories/analytics';
+import {
+  getServicesOverview,
+  getBingwaOneModuleSummaries,
+  getBingwaOneModuleDetails,
+  getPesatrixOverview,
+  getPesatrixEventDetails
+} from '@/lib/repositories/services-analytics';
 import { verifyDashboardPin, setDashboardPin, hasPinConfigured } from '@/lib/repositories/pin';
 import { logAudit } from '@/lib/repositories/audit';
 import { DarajaService } from '@/lib/services/daraja';
@@ -1023,6 +1030,61 @@ export async function getServicesStatsAction() {
 
   } catch (err: any) {
     console.error('getServicesStatsAction failed:', err);
+    return { success: false, error: err.message };
+  }
+}
+
+export async function getServicesOverviewAction(period: string, customStart?: string, customEnd?: string) {
+  await checkAuth();
+  try {
+    const data = await getServicesOverview(period, customStart, customEnd);
+    return { success: true, ...data };
+  } catch (err: any) {
+    console.error('getServicesOverviewAction failed:', err);
+    return { success: false, error: err.message };
+  }
+}
+
+export async function getBingwaOneModuleSummariesAction(period: string, customStart?: string, customEnd?: string) {
+  await checkAuth();
+  try {
+    const data = await getBingwaOneModuleSummaries(period, customStart, customEnd);
+    return { success: true, ...data };
+  } catch (err: any) {
+    console.error('getBingwaOneModuleSummariesAction failed:', err);
+    return { success: false, error: err.message };
+  }
+}
+
+export async function getBingwaOneModuleDetailsAction(moduleName: string, period: string, customStart?: string, customEnd?: string) {
+  await checkAuth();
+  try {
+    const data = await getBingwaOneModuleDetails(moduleName, period, customStart, customEnd);
+    return { success: true, ...data };
+  } catch (err: any) {
+    console.error('getBingwaOneModuleDetailsAction failed:', err);
+    return { success: false, error: err.message };
+  }
+}
+
+export async function getPesatrixOverviewAction(period: string, customStart?: string, customEnd?: string) {
+  await checkAuth();
+  try {
+    const data = await getPesatrixOverview(period, customStart, customEnd);
+    return { success: true, ...data };
+  } catch (err: any) {
+    console.error('getPesatrixOverviewAction failed:', err);
+    return { success: false, error: err.message };
+  }
+}
+
+export async function getPesatrixEventDetailsAction(eventType: 'activation' | 'withdrawal', period: string, customStart?: string, customEnd?: string) {
+  await checkAuth();
+  try {
+    const data = await getPesatrixEventDetails(eventType, period, customStart, customEnd);
+    return { success: true, ...data };
+  } catch (err: any) {
+    console.error('getPesatrixEventDetailsAction failed:', err);
     return { success: false, error: err.message };
   }
 }
