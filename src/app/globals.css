@@ -1,4 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap');
 @import "tailwindcss";
 
 :root {
@@ -11,7 +10,6 @@
   --danger: #E60000;
   --warning-main: #FF4500;
   --muted-main: #6B7280;
-  --font-outfit: 'Outfit', sans-serif;
 }
 
 /* Support dark mode class */

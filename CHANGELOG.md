@@ -5,6 +5,12 @@ All notable changes to the Skylink Bundlefasta Dashboard project will be documen
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to Semantic Versioning.
 
+## [1.11.0] - 2026-06-14
+
+### Changed
+- Configured local loading of `Outfit` font family using `next/font/google` in [layout.tsx](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/app/layout.tsx) with weights 300, 400, 500, 600, and 700.
+- Removed external Google Fonts stylesheet `@import` and local font-family overrides in [globals.css](file:///c:/Users/ADMIN/OneDrive/Desktop/Skylink-Bundlefasta-main/src/app/globals.css) to fix browser font rendering issues (e.g., condensed or thick looks) and optimize load times.
+
 ## [1.10.0] - 2026-06-14
 
 ### Added
