@@ -5,6 +5,16 @@ All notable changes to the Skylink Bundlefasta Dashboard project will be documen
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to Semantic Versioning.
 
+## [1.6.0] - 2026-06-14
+
+### Added
+- Created a production-ready Next.js Route Handler at `src/app/webhooks/bingwazone/route.ts` to expose the public webhook endpoint `/webhooks/bingwazone` (without the `/api` prefix), supporting signature checking, idempotency validation, payload parsing, and transaction recording/enrichment.
+- Added comprehensive unit and integration tests inside `tests/webhooks.test.ts` covering missing headers, malformed signature format, invalid signature, invalid JSON payload, test webhook processing and duplicate checks, real payment payloads, and wallet withdrawal webhook transactions.
+
+### Changed
+- Updated the database schema for the `webhook_events` table (adding columns `provider`, `payload`, `signature`, `processed_at`, and applying a UNIQUE constraint on `event_key` for concurrent-proof database idempotency).
+- Updated `resolveSourceId` inside `src/lib/repositories/transactions.ts` to fallback to `createAdminClient` when cookies request store context is unavailable, enabling standalone test suite runs.
+
 ## [1.5.1] - 2026-06-13
 
 ### Fixed / Verification

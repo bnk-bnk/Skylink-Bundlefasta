@@ -5,7 +5,12 @@ import { Transaction, TransactionDirection, TransactionType, TransactionStatus }
 export async function resolveSourceId(referenceText: string | null): Promise<string | null> {
   if (!referenceText) return null;
   
-  const supabase = await createClient();
+  let supabase;
+  try {
+    supabase = await createClient();
+  } catch (e) {
+    supabase = createAdminClient();
+  }
   const cleanRef = referenceText.trim().toUpperCase();
 
   // Search product_sources (case-insensitive checking is safer)
